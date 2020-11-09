@@ -17,12 +17,14 @@ int main(int argc, char ** argv) {
 	cm_vm_init();
 
 	cm_object_t *obj = cm_object_load("teste.json");
-	check_player(obj);
 
-	cm_object_t *el = NULL;
-	cm_object_foreach(el, obj) {
-		CM_TRACELOG("%s %d", el->name, el->type);
-	}
+	cm_object_add_string(obj, "coffe-machine", "123321321123123");
+
+	const char *print = cm_print_json(obj);
+	CM_TRACELOG("%s", print);
+
+	cm_vm_t *vm = cm_get_vm();
+	vm->write_file("bora.json", print, 0, "wb");
 
 	cm_vm_deinit();
 	return 0;

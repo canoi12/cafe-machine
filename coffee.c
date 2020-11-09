@@ -1089,26 +1089,61 @@ static char *check_content(const char *json_str, int *len) {
 }
 
 static int char_is_number(char p) {
+  // CM_TRACELOG("%c", p);
   int n = p - 48;
 
-  return n >= 0 || n <= 9;
+  return (n >= 0 && n <= 9);
 }
 
 static int str_is_boolean(char *p) {
   CM_ASSERT(p != NULL);
   char val[6];
+  memset(val, 0, 6);
+  p = ignore_chars(p);
 
-  if (*p != 't') {
+  if (*p == 't') {
     memcpy(val, p, 4);
     return !strcmp(val, "true");
   }
 
-  if (*p != 'f') {
+  if (*p == 'f') {
     memcpy(val, p, 5);
     return !strcmp(val, "false");
   }
 
   return 0;
+}
+
+static char *check_null(const char *json_str) {
+  if (!json_str) return NULL;
+
+  char *p = (char*)json_str;
+  p = (char*)ignore_chars(p);
+  char val[5];
+
+  if (*p == 'n') {
+    memcpy(val, p, 4);
+    val[4] = '\0';
+    if (!strcmp(val, "null")) return p;
+  }
+
+  return NULL;
+}
+
+static char *check_boolean(const char *json_str, int *len) {
+  if (!json_str) return NULL;
+
+  char *p = (char*)json_str;
+  p = (char*)ignore_chars(p);
+
+  if (str_is_boolean(p)) {
+    int i = 0;
+    char *boolean = check_content(p, &i);
+    if (len) *len = i;
+    return p;
+  }
+
+  return NULL;
 }
 
 static char *check_number(const char *json_str, int *len) {
@@ -1136,7 +1171,8 @@ static char *check_string(const char *json_str, int *len) {
     p++;
     int i = next_char(p, '"');
     // CM_TRACELOG("%s", p+i);
-    if (i < 1) return NULL;
+    if (i < 0) return NULL;
+    // if (i == 0)
     if (len) *len = i;
     return p;
   }
@@ -1148,11 +1184,41 @@ static char *check_string(const char *json_str, int *len) {
 static cm_object_t *parse_json_null(const char **json_str) {
   CM_ASSERT(json_str != NULL);
 
+  char *init = (char*)*json_str;
+
+  char *null = check_null(init);
+  if (!null) return NULL;
+
+  cm_object_t *o_null = cm_object_create(CM_TNULL);
+  *json_str += 5;
+
+  return o_null;
+}
+
+static int str_to_bool(const char *str) {
+  if (strstr(str, "true")) return 1;
+  return 0;
 }
 
 static cm_object_t *parse_json_boolean(const char **json_str) {
   CM_ASSERT(json_str != NULL);
 
+  char *init = (char*)*json_str;
+
+  // char *p = init;
+  int len = 0;
+  char *boolean = check_boolean(init, &len);
+  if (!boolean || len <= 0) return NULL;
+
+  char val[len+1];
+  memcpy(val, boolean, len);
+  val[len] = '\0';
+
+  cm_object_t *o_bool = cm_object_create(CM_TBOOLEAN);
+  o_bool->boolean = str_to_bool(val);
+  *json_str += len+1;
+
+  return o_bool;
 }
 
 
@@ -1199,11 +1265,12 @@ static cm_object_t *parse_json_string(const char **json_str) {
   int len = 0;
 
   char *str = check_string(init, &len);
-  if (!str || len <= 0) return NULL;
+  if (!str || len < 0) return NULL;
 
 
+  const char *strp = len > 0 ? str : "";
   cm_object_t *o_str = cm_object_create(CM_TSTRING);
-  memcpy(o_str->string, str, len);
+  memcpy(o_str->string, strp, len);
   // CM_TRACELOG("%s", str);
 
 
@@ -1233,6 +1300,7 @@ cm_object_t *parse_json_array(const char **json_str) {
       // CM_TRACELOG("%s", p);
 
       cm_object_t *child = NULL;
+      // CM_TRACELOG("%s", p);
       if (*p == '{') {
         child = parse_json_object(&p);
       } else if (*p == '"') {
@@ -1241,8 +1309,10 @@ cm_object_t *parse_json_array(const char **json_str) {
         child = parse_json_array(&p);
       } else if (char_is_number(*p)) {
         child = parse_json_number(&p);
+      } else if (str_is_boolean(p)) {
+        child = parse_json_boolean(&p);
       } else {
-
+        child = parse_json_null(&p);
       }
       // CM_
       p = ignore_chars(p);
@@ -1293,6 +1363,7 @@ cm_object_t *parse_json_object(const char **json_str) {
       p = (char*)ignore_chars(p);
 
       cm_object_t *child = NULL;
+        // CM_TRACELOG("%s", p);
       if (*p == '{') {
         child = parse_json_object(&p);
       } else if (*p == '"') {
@@ -1301,8 +1372,10 @@ cm_object_t *parse_json_object(const char **json_str) {
         child = parse_json_array(&p);
       } else if (char_is_number(*p)) {
         child = parse_json_number(&p);
+      } else if (str_is_boolean(p)) {
+        child = parse_json_boolean(&p);
       } else {
-
+        child = parse_json_null(&p);
       }
 
       // CM_TRACELOG("%p %s", child, p);
@@ -1330,8 +1403,171 @@ cm_object_t* cm_parse_json(const char *json_string) {
   return root;
 }
 
-const char* cm_print_json(cm_object_t *object) {
+const char* print_json_null(cm_object_t *obj, int *char_count) {
+  if (obj->type != CM_TNULL) return NULL;
+  if (char_count) *char_count += 4;
 
+  char *str = CM_CALLOC(1, 5);
+  strcpy(str, "null");
+
+  return str;
+}
+
+const char* print_json_boolean(cm_object_t *obj, int *char_count) {
+  if (obj->type != CM_TBOOLEAN) return NULL;
+  int sz = obj->boolean ? 5 : 6;
+  if (char_count) *char_count += sz;
+
+  char *str = CM_CALLOC(1, sz);
+
+  if (obj->boolean) strcpy(str, "true");
+  else strcpy(str, "false");
+
+  return str;
+}
+
+const char* print_json_number(cm_object_t *obj, int *char_count) {
+  if (obj->type != CM_TNUMBER) return NULL;
+  char lstr_n[32];
+  sprintf(lstr_n, "%f", obj->number);
+
+  int sz = strlen(lstr_n);
+
+  char *str = CM_CALLOC(1, sz+1);
+
+  if (char_count) *char_count += sz;
+  strcpy(str, lstr_n);
+
+  return str;
+}
+
+const char* print_json_string(cm_object_t *obj, int *char_count) {
+  if (obj->type != CM_TSTRING) return NULL;
+  int len = strlen(obj->string);
+  char *str = CM_CALLOC(1, len+3);
+
+  if (char_count) *char_count += len+3;
+
+  sprintf(str, "\"%s\"", obj->string);
+
+  return str;
+}
+
+const char *print_json_array(cm_object_t *obj, int *char_count);
+const char *print_json_object(cm_object_t *obj, int *char_count);
+
+const char* print_json_array(cm_object_t *obj, int *char_count) {
+  if (obj->type != CM_TARRAY) return NULL;
+  int str_len = 3;
+  char *str = CM_CALLOC(1, str_len);
+  *str = '[';
+
+  cm_object_t *el = NULL;
+  cm_object_foreach(el, obj) {
+    const char *el_str = NULL;
+    int el_str_len = 0;
+    switch (el->type) {
+      case CM_TNULL:
+        el_str = print_json_null(el, &el_str_len);
+        break;
+      case CM_TBOOLEAN:
+        el_str = print_json_boolean(el, &el_str_len);
+        break;
+      case CM_TNUMBER:
+        el_str = print_json_number(el, &el_str_len);
+        break;
+      case CM_TSTRING:
+        el_str = print_json_string(el, &el_str_len);
+        break;
+      case CM_TARRAY:
+        el_str = print_json_array(el, &el_str_len);
+        break;
+      case CM_TTABLE:
+        el_str = print_json_object(el, &el_str_len);
+        break;
+      default:
+        CM_TRACELOG("Invalid json type: %d", el->type);
+    }
+    if (el_str && el_str_len > 0) {
+
+      str_len += el_str_len + 2;
+      str = realloc(str, str_len);
+      strcat(str, el_str);
+      if (el->next) strcat(str, ",");
+      CM_FREE((char*)el_str);
+    }
+  }
+  strcat(str, "]");
+
+  if (char_count) *char_count += str_len;
+
+  return str;
+}
+
+const char* print_json_object(cm_object_t *obj, int *char_count) {
+  if (obj->type != CM_TTABLE) return NULL;
+  int str_len = 3;
+  char *str = CM_CALLOC(1, str_len);
+  *str = '{';
+
+  cm_object_t *el = NULL;
+  cm_object_foreach(el, obj) {
+    const char *el_str = NULL;
+    int el_str_len = 0;
+    switch (el->type) {
+      case CM_TNULL:
+        el_str = print_json_null(el, &el_str_len);
+        break;
+      case CM_TBOOLEAN:
+        el_str = print_json_boolean(el, &el_str_len);
+        break;
+      case CM_TNUMBER:
+        el_str = print_json_number(el, &el_str_len);
+        break;
+      case CM_TSTRING:
+        el_str = print_json_string(el, &el_str_len);
+        break;
+      case CM_TARRAY:
+        el_str = print_json_array(el, &el_str_len);
+        break;
+      case CM_TTABLE:
+        el_str = print_json_object(el, &el_str_len);
+        break;
+      default:
+        CM_TRACELOG("Invalid json type: %d", el->type);
+    }
+
+    if (el_str && el_str_len > 0) {
+      int key_size = strlen(el->name) + 3;
+      char key[key_size+2];
+      sprintf(key, "\"%s\": ", el->name);
+
+      // CM_
+
+      str_len += key_size + el_str_len + 2;
+      str = realloc(str, str_len);
+      
+      strcat(str, key);
+      strcat(str, el_str);
+      if (el->next) strcat(str, ",");
+      // CM_TRACELOG("%s %s %s", el->name, str, el_str);
+      CM_FREE((char*)el_str);
+    }
+  }
+  strcat(str, "}");
+
+  if (char_count) *char_count += str_len;
+  // CM_TRACELOG("%s %d", obj->name, str_len);
+
+  return str;
+}
+
+const char* cm_print_json(cm_object_t *object) {
+  if (!object) return "{}";
+
+  const char *str = print_json_object(object, NULL);
+  // CM_TRACELOG("%s", str);
+  return str;
 }
 
 
