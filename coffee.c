@@ -17,8 +17,8 @@
 #define CM_META_LOCAL_POS "__local_pos__"
 
 #define CHECK_VM(vm) \
-	CM_ASSERT(vm != NULL); \
-	CM_ASSERT(vm->root != NULL)
+  CM_ASSERT(vm != NULL); \
+  CM_ASSERT(vm->root != NULL)
 
 cm_vm_t *vm;
 
@@ -26,61 +26,62 @@ const struct {
   const char *name;
   int type;
 } type_names[] = {
-  {"null", CM_TYPE_NULL},
-  {"number", CM_TYPE_NUMBER},
-  {"string", CM_TYPE_STRING},
-  {"boolean", CM_TYPE_BOOLEAN},
-  {"vec2", CM_TYPE_VEC2},
-  {"vec3",   CM_TYPE_VEC3},
-  {"vec4",   CM_TYPE_VEC4},
-  {"array", CM_TYPE_ARRAY},
-  {"table", CM_TYPE_TABLE},
-  {"custom", CM_TYPE_CUSTOM},
-  {"userdata", CM_TYPE_USERDATA},
-  {"reference", CM_TYPE_REFERENCE}
+  {"null", CM_TNULL},
+  {"number", CM_TNUMBER},
+  {"string", CM_TSTRING},
+  {"boolean", CM_TBOOLEAN},
+  {"vec2", CM_TVEC2},
+  {"vec3",   CM_TVEC3},
+  {"vec4",   CM_TVEC4},
+  {"array", CM_TARRAY},
+  {"table", CM_TTABLE},
+  {"custom", CM_TCUSTOM},
+  {"userdata", CM_TUSERDATA},
+  {"reference", CM_TREFERENCE}
 };
 
 static int get_type_from_string(const char *string) {
   CM_ASSERT(vm != NULL);
   cm_object_t *types = cm_object_get(vm->root, CM_META_TYPE);
   int i;
-  for (i = 0; i < CM_TYPE_MAX; i++) {
+  for (i = 0; i < CM_TMAX; i++) {
     if (!strcmp(type_names[i].name, string)) return type_names[i].type;
   }
 
-  return CM_TYPE_NULL;
+  return CM_TNULL;
 }
 
 int get_type_from_cjson_type(int cjson_type, cJSON *const json) {
-  int type = CM_TYPE_NULL;
+  int type = CM_TNULL;
   switch (cjson_type) {
     case cJSON_Number:
-      type = CM_TYPE_NUMBER;
+      type = CM_TNUMBER;
       break;
     case cJSON_True:
-      type = CM_TYPE_BOOLEAN;
+      type = CM_TBOOLEAN;
       break;
     case cJSON_False:
-      type = CM_TYPE_BOOLEAN;
+      type = CM_TBOOLEAN;
       break;
     case cJSON_String:
-      type = CM_TYPE_STRING;
+      type = CM_TSTRING;
       break;
     case cJSON_Object:
-      type = CM_TYPE_TABLE;
+      type = CM_TTABLE;
       break;
     case cJSON_Array:
-      {
-        int sz = -1;
-        if (json) sz = cJSON_GetArraySize(json);
-        if (sz == 2) type = CM_TYPE_VEC2;
-        else if (sz == 3) type = CM_TYPE_VEC3;
-        else if (sz == 4) type = CM_TYPE_VEC4;
-        else type = CM_TYPE_ARRAY;
-      }
+      // {
+      //   int sz = -1;
+      //   if (json) sz = cJSON_GetArraySize(json);
+      //   if (sz == 2) type = CM_TVEC2;
+      //   else if (sz == 3) type = CM_TVEC3;
+      //   else if (sz == 4) type = CM_TVEC4;
+      //   else type = CM_TARRAY;
+      // }
+      type = CM_TARRAY;
       break;
     default:
-      type = CM_TYPE_CUSTOM;
+      type = CM_TCUSTOM;
   }
 
   return type;
@@ -132,32 +133,32 @@ void write_file(const char *filename, const char *string, size_t size, const cha
  *===================*/
 
 int cm_vm_init() {
-	vm = CM_CALLOC(1, sizeof(*vm));
-	if (!vm) return 0;
+  vm = CM_CALLOC(1, sizeof(*vm));
+  if (!vm) return 0;
 
-	vm->root = cm_object_create(CM_TYPE_TABLE);
-	vm->gc = cm_object_create(CM_TYPE_TABLE);
-	vm->read_file = read_file;
-	vm->write_file = write_file;
-	cm_object_add_table(vm->root, CM_META_TYPE, NULL);
+  vm->root = cm_object_create(CM_TTABLE);
+  vm->gc = cm_object_create(CM_TTABLE);
+  vm->read_file = read_file;
+  vm->write_file = write_file;
+  cm_object_add_table(vm->root, CM_META_TYPE, NULL);
 
-	return 1;
+  return 1;
 }
 
 void cm_vm_deinit() {
-	cm_object_delete(vm->root);
-	cm_object_delete(vm->gc);
-	CM_FREE(vm);
+  cm_object_delete(vm->root);
+  cm_object_delete(vm->gc);
+  CM_FREE(vm);
 }
 
 cm_vm_t* cm_get_vm() {
-	CHECK_VM(vm);
-	return vm;
+  CHECK_VM(vm);
+  return vm;
 }
 
 void cm_vm_gc() {
-	CHECK_VM(vm);
-	cm_object_clear(vm->gc);
+  CHECK_VM(vm);
+  cm_object_clear(vm->gc);
 }
 
 cm_object_t *cm_vm_set_type(const char *typename, cm_object_t* type) {
@@ -180,24 +181,24 @@ cm_object_t *cm_vm_get_type(const char *typename) {
 }
 
 cm_object_t* cm_vm_get_object(const char *name) {
-	if (!name) return NULL;
-	const char *part = strstr(name, "//");
-	int sz = strlen(name);
-	if (part) sz = part - name;
+  if (!name) return NULL;
+  const char *part = strstr(name, "//");
+  int sz = strlen(name);
+  if (part) sz = part - name;
 
-	char key[sz];
-	memcpy(key, name, sz);
-	cm_object_t *obj = cm_object_get(vm->root, key);
-	if (part) return cm_object_get(obj, part+2);
+  char key[sz];
+  memcpy(key, name, sz);
+  cm_object_t *obj = cm_object_get(vm->root, key);
+  if (part) return cm_object_get(obj, part+2);
 
-	return NULL;
+  return NULL;
 }
 
 cm_object_t* cm_vm_set_object(const char *name, cm_object_t *object) {
-	return NULL;
+  return NULL;
 }
 
-cm_object_t* cm_object_create(CM_TYPE_ type) {
+cm_object_t* cm_object_create(CM_T_ type) {
   cm_object_t *object = malloc(sizeof(*object));
   memset(object, 0, sizeof(*object));
 
@@ -214,25 +215,31 @@ cm_object_t* cm_object_create(CM_TYPE_ type) {
 }
 
 cm_object_t *cm_object_load(const char *filename) {
-	if (!filename) return NULL;
-	cJSON *json = json_open(filename);
-	if (!json) return NULL;
+  if (!filename) return NULL;
+  // cJSON *json = json_open(filename);
+  const char *content = vm->read_file(filename, "rb");
 
-	// CM_TRACEERR("okay");
+  cm_object_t *obj = cm_parse_json(content);
+  if (!obj) {
+    free((char*)content);
+    return NULL;
+  }
 
-	return cm_object_from_json(json, NULL);
+  // CM_TRACEERR("okay");
+
+  return obj;
 }
 
 cm_object_t* cm_vec2_array_from_json(cJSON *const array) {
   if (!array) return NULL;
-  cm_object_t *object = cm_create_array(NULL, NULL);
+  cm_object_t *object = cm_create_array(NULL);
 
 
   cJSON *item = NULL;
   cJSON_ArrayForEach(item, array) {
     if (json_is_vec2(item)) {
-    	CM_VEC2 vec = json_to_vec2(item);
-      cm_object_t *v = cm_create_vec2(vec, NULL);
+      VEC2_TYPE vec = json_to_vec2(item);
+      cm_object_t *v = cm_create_vec2(vec);
       cm_object_push(object, -1, v);
     }
   }
@@ -240,11 +247,11 @@ cm_object_t* cm_vec2_array_from_json(cJSON *const array) {
   return object;
 }
 
-cm_object_t* cm_object_from_json(cJSON* json, cm_object_t *meta_field) {
+cm_object_t* cm_object_from_json(cJSON* json) {
   if (!json) return NULL;
   cm_object_t *field = NULL;
   const char *typename = NULL;
-  if (meta_field) typename = cm_object_get_string(meta_field, CM_META_TYPE);
+  // if (meta_field) typename = cm_object_get_string(meta_field, CM_META_TYPE);
 
   int type = -1;
   if (typename) type = get_type_from_string(typename);
@@ -252,31 +259,31 @@ cm_object_t* cm_object_from_json(cJSON* json, cm_object_t *meta_field) {
   if (type == -1) type = get_type_from_cjson_type(json->type, json);
 
   switch (type) {
-    case CM_TYPE_NUMBER:
-      field = cm_number_from_json(json, meta_field);
+    case CM_TNUMBER:
+      field = cm_number_from_json(json);
       break;
-    case CM_TYPE_STRING:
-      field = cm_string_from_json(json, meta_field);
+    case CM_TSTRING:
+      field = cm_string_from_json(json);
       break;
-    case CM_TYPE_BOOLEAN:
-      field = cm_boolean_from_json(json, meta_field);
+    case CM_TBOOLEAN:
+      field = cm_boolean_from_json(json);
       break;
-    case CM_TYPE_VEC2:
-      field = cm_vec2_from_json(json, meta_field);
+    case CM_TVEC2:
+      field = cm_vec2_from_json(json);
       break;
-    case CM_TYPE_VEC3:
-      field = cm_vec3_from_json(json, meta_field);
+    case CM_TVEC3:
+      field = cm_vec3_from_json(json);
       break;
-    case CM_TYPE_VEC4:
-      field = cm_vec4_from_json(json, meta_field);
+    case CM_TVEC4:
+      field = cm_vec4_from_json(json);
       break;
-    case CM_TYPE_ARRAY:
-      field = cm_array_from_json(json, meta_field);
+    case CM_TARRAY:
+      field = cm_array_from_json(json);
       break;
-    case CM_TYPE_TABLE:
-      field = cm_table_from_json(json, meta_field);
+    case CM_TTABLE:
+      field = cm_table_from_json(json);
       break;
-    case CM_TYPE_CUSTOM:
+    case CM_TCUSTOM:
       {
         field = cm_vm_get_type(typename);
         // if (type) {
@@ -290,13 +297,9 @@ cm_object_t* cm_object_from_json(cJSON* json, cm_object_t *meta_field) {
     default:
       CM_TRACELOG("Unknown type");
   }
-  // if (field && field->type == CM_TYPE_VEC2) CM_TRACEERR("testew %f %f", field->type, field->vec2.data[0], field->vec2.data[1]);
+  // if (field && field->type == CM_TVEC2) CM_TRACEERR("testew %f %f", field->type, field->vec2.data[0], field->vec2.data[1]);
 
-  if (field && meta_field) {
-    field->meta = meta_field;
-    field->type = type;
-  }
-
+  if (field) field->type = type;
   return field;
 }
 
@@ -311,9 +314,9 @@ void cm_object_clear(cm_object_t *object) {
 }
 
 void cm_object_delete(cm_object_t *object) {
-	if (!object) return;
-	cm_object_clear(object);
-	CM_FREE(object);
+  if (!object) return;
+  cm_object_clear(object);
+  CM_FREE(object);
 }
 
 cm_object_t *cm_object_get(cm_object_t *field, const char *name) {
@@ -323,12 +326,13 @@ cm_object_t *cm_object_get(cm_object_t *field, const char *name) {
   const char *part = strstr(name, "//");
   // CM_TRACELOG("%s", name);
   if (!part) {
-  	cm_object_t *item = NULL;
-  	cm_object_foreach(item, field) {
-	  	if (!strcmp(item->name, name)) {
-	  		return item;
-	  	}
-	  }
+    cm_object_t *item = NULL;
+    cm_object_foreach(item, field) {
+      if (!strcmp(item->name, name)) {
+        return item;
+      }
+    }
+    return NULL;
   }
 
   size_t sz = part - name;
@@ -336,7 +340,7 @@ cm_object_t *cm_object_get(cm_object_t *field, const char *name) {
   memset(key, 0, sz+1);
 
   // for (int i = 0; i < sz; i++) {
-  // 	CM_TRACELOG("%c", name[i]);
+  //  CM_TRACELOG("%c", name[i]);
   // }
 
   memcpy(key, name, sz);
@@ -389,7 +393,7 @@ cm_object_t *cm_object_set(cm_object_t *field, const char *name, cm_object_t *it
 
 void cm_object_push(cm_object_t *field, int index, cm_object_t *item) {
   CM_ASSERT(field != NULL);
-  if (field->type != CM_TYPE_ARRAY) return;
+  if (field->type != CM_TARRAY) return;
   if (!item) return;
 
   if (!field->child) {
@@ -417,12 +421,47 @@ int cm_object_length(cm_object_t *field) {
   return len;
 }
 
+void cm_object_update_meta(cm_object_t *obj) {
+  CM_ASSERT(obj != NULL);
+  if (!obj->meta) return;
+  
+  cm_object_t *meta = obj->meta;
+  cm_object_t *typef = cm_object_get(meta, CM_META_TYPE);
+  if (typef) obj->type = get_type_from_string(typef->string);
+
+  cm_object_t *el = NULL;
+  cm_object_foreach(el, obj) {
+    cm_object_t *metac = cm_object_get(meta, el->name);
+    if (metac) cm_object_update_meta(el);
+  }
+}
+
+void cm_object_set_meta(cm_object_t *obj, cm_object_t *meta) {
+  CM_ASSERT(obj != NULL);
+  if (!meta) return;
+  // if (obj->meta) cm_object_add(vm->gc, meta->name, obj->meta);
+
+  // obj->meta = meta;
+  obj->meta = meta;
+  cm_object_t *el = NULL;
+  cm_object_foreach(el, obj) {
+    cm_object_t *metac = cm_object_get(meta, el->name);
+    if (metac) cm_object_set_meta(el, metac);
+  }
+}
+
+cm_object_t* cm_object_get_meta(cm_object_t *obj) {
+  CM_ASSERT(obj != NULL);
+
+  return obj->meta;
+}
+
 /*================*
  *     Number     *
  *================*/
 
-cm_object_t* cm_create_number(float number, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_NUMBER);
+cm_object_t* cm_create_number(float number) {
+  cm_object_t *field = cm_object_create(CM_TNUMBER);
   if (!field) return NULL;
 
   cm_object_set_number(field, number);
@@ -430,31 +469,31 @@ cm_object_t* cm_create_number(float number, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_number_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_number_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (json->type != cJSON_Number) return NULL;
 
   float number = json_to_number(json);
-  return cm_create_number(number, meta);
+  return cm_create_number(number);
 }
 
 void cm_object_set_number(cm_object_t *field, float number) {
   if (!field) return;
-  if (field->type != CM_TYPE_NUMBER) return;
+  if (field->type != CM_TNUMBER) return;
 
   field->number = number;
 }
 
 float cm_object_to_number(cm_object_t *object) {
   CM_ASSERT(object != NULL);
-  CM_ASSERT(object->type != CM_TYPE_NUMBER);
+  CM_ASSERT(object->type != CM_TNUMBER);
 
   return cm_object_to_opt_number(object, -1);
 }
 
 float cm_object_to_opt_number(cm_object_t *field, float opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_NUMBER) return opt;
+  if (field->type != CM_TNUMBER) return opt;
 
   return field->number;
 }
@@ -474,7 +513,7 @@ cm_object_t *cm_object_add_number(cm_object_t *field, const char *name, float nu
   if (!field) return NULL;
   if (!name) return NULL;
 
-  cm_object_t *n_field = cm_create_number(number, NULL);
+  cm_object_t *n_field = cm_create_number(number);
   cm_object_set(field, name, n_field);
 
   return n_field;
@@ -484,8 +523,8 @@ cm_object_t *cm_object_add_number(cm_object_t *field, const char *name, float nu
  * String
  *****************/
 
-cm_object_t* cm_create_string(const char *string, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_STRING);
+cm_object_t* cm_create_string(const char *string) {
+  cm_object_t *field = cm_object_create(CM_TSTRING);
   if (!field) return NULL;
 
   cm_object_set_string(field, string);
@@ -493,17 +532,17 @@ cm_object_t* cm_create_string(const char *string, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_string_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_string_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (json->type != cJSON_String) return NULL;
 
   const char *string = json_to_string(json);
-  return cm_create_string(string, meta);
+  return cm_create_string(string);
 }
 
 void cm_object_set_string(cm_object_t *field, const char *string) {
   if (!field) return;
-  if (field->type != CM_TYPE_STRING) return;
+  if (field->type != CM_TSTRING) return;
 
   // field->string = string;
   strcpy(field->string, string);
@@ -512,14 +551,14 @@ void cm_object_set_string(cm_object_t *field, const char *string) {
 
 const char* cm_object_to_string(cm_object_t *field) {
   CM_ASSERT(field != NULL);
-  CM_ASSERT(field->type == CM_TYPE_STRING);
+  CM_ASSERT(field->type == CM_TSTRING);
 
   return cm_object_to_opt_string(field, NULL);
 }
 
 const char* cm_object_to_opt_string(cm_object_t *field, const char* opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_STRING) return opt;
+  if (field->type != CM_TSTRING) return opt;
 
   return field->string;
 }
@@ -539,7 +578,7 @@ cm_object_t *cm_object_add_string(cm_object_t *field, const char *name, const ch
   if (!field) return NULL;
   if (!name) return NULL;
 
-  cm_object_t *n_field = cm_create_string(string, NULL);
+  cm_object_t *n_field = cm_create_string(string);
   cm_object_set(field, name, n_field);
 
   return n_field;
@@ -550,8 +589,8 @@ cm_object_t *cm_object_add_string(cm_object_t *field, const char *name, const ch
  * Boolean
  *****************/
 
-cm_object_t* cm_create_boolean(int boolean, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_BOOLEAN);
+cm_object_t* cm_create_boolean(int boolean) {
+  cm_object_t *field = cm_object_create(CM_TBOOLEAN);
   if (!field) return NULL;
 
   cm_object_set_boolean(field, boolean);
@@ -559,31 +598,31 @@ cm_object_t* cm_create_boolean(int boolean, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_boolean_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_boolean_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (!cJSON_IsBool(json)) return NULL;
 
   int boolean = json_to_boolean(json);
-  return cm_create_boolean(boolean, meta);
+  return cm_create_boolean(boolean);
 }
 
 void cm_object_set_boolean(cm_object_t *obj, int boolean) {
   if (!obj) return;
-  if (obj->type != CM_TYPE_BOOLEAN) return;
+  if (obj->type != CM_TBOOLEAN) return;
 
   obj->boolean = boolean;
 }
 
 int cm_object_to_boolean(cm_object_t *object) {
   CM_ASSERT(object != NULL);
-  CM_ASSERT(object->type != CM_TYPE_BOOLEAN);
+  CM_ASSERT(object->type != CM_TBOOLEAN);
 
   return cm_object_to_opt_boolean(object, 0);
 }
 
 int cm_object_to_opt_boolean(cm_object_t *object, int opt) {
   if (!object) return opt;
-  if (object->type != CM_TYPE_BOOLEAN) return opt;
+  if (object->type != CM_TBOOLEAN) return opt;
 
   return object->boolean;
 }
@@ -603,7 +642,7 @@ cm_object_t *cm_object_add_boolean(cm_object_t *field, const char *name, int boo
   if (!field) return NULL;
   if (!name) return NULL;
 
-  cm_object_t *n_field = cm_create_boolean(boolean, NULL);
+  cm_object_t *n_field = cm_create_boolean(boolean);
   cm_object_set(field, name, n_field);
 
   return n_field;
@@ -613,8 +652,8 @@ cm_object_t *cm_object_add_boolean(cm_object_t *field, const char *name, int boo
  * Vec2
  *****************/
 
-cm_object_t* cm_create_vec2(CM_VEC2 vec, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_VEC2);
+cm_object_t* cm_create_vec2(VEC2_TYPE vec) {
+  cm_object_t *field = cm_object_create(CM_TVEC2);
   if (!field) return NULL;
 
   cm_object_set_vec2(field, vec);
@@ -622,54 +661,54 @@ cm_object_t* cm_create_vec2(CM_VEC2 vec, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_vec2_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_vec2_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (json->type != cJSON_Array) return NULL;
 
-  CM_VEC2 vec = json_to_vec2(json);
+  VEC2_TYPE vec = json_to_vec2(json);
   // cJSON *item = json->child;
   // CM_TRACELOG("%s %f %f", json->string, vec.data[0], vec.data[1]);
 
-  return cm_create_vec2(vec, meta);
+  return cm_create_vec2(vec);
 }
 
-void cm_object_set_vec2(cm_object_t *field, CM_VEC2 vec) {
+void cm_object_set_vec2(cm_object_t *field, VEC2_TYPE vec) {
   if (!field) return;
-  if (field->type != CM_TYPE_VEC2) return;
+  if (field->type != CM_TVEC2) return;
 
   field->vec2 = vec;
 }
 
-CM_VEC2 cm_object_to_vec2(cm_object_t *field) {
+VEC2_TYPE cm_object_to_vec2(cm_object_t *field) {
   CM_ASSERT(field != NULL);
-  CM_ASSERT(field->type == CM_TYPE_VEC2);
+  CM_ASSERT(field->type == CM_TVEC2);
 
   return cm_object_to_opt_vec2(field, cm_vec2(-1, -1));
 }
 
-CM_VEC2 cm_object_to_opt_vec2(cm_object_t *field, CM_VEC2 opt) {
+VEC2_TYPE cm_object_to_opt_vec2(cm_object_t *field, VEC2_TYPE opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_VEC2) return opt;
+  if (field->type != CM_TVEC2) return opt;
 
   return field->vec2;
 }
 
-CM_VEC2 cm_object_get_vec2(cm_object_t *field, const char *name) {
+VEC2_TYPE cm_object_get_vec2(cm_object_t *field, const char *name) {
   CM_ASSERT(field != NULL);
   return cm_object_get_opt_vec2(field, name, cm_vec2(-1, -1));
 }
 
-CM_VEC2 cm_object_get_opt_vec2(cm_object_t *field, const char *name, CM_VEC2 opt) {
+VEC2_TYPE cm_object_get_opt_vec2(cm_object_t *field, const char *name, VEC2_TYPE opt) {
   if (!field) return opt;
   cm_object_t *item = cm_object_get(field, name);
   return cm_object_to_opt_vec2(item, opt);
 }
 
-cm_object_t *cm_object_add_vec2(cm_object_t *field, const char *name, CM_VEC2 vec2) {
+cm_object_t *cm_object_add_vec2(cm_object_t *field, const char *name, VEC2_TYPE vec2) {
   if (!field) return NULL;
   if (!name) return NULL;
 
-  cm_object_t *n_field = cm_create_vec2(vec2, NULL);
+  cm_object_t *n_field = cm_create_vec2(vec2);
   cm_object_set(field, name, n_field);
 
   return n_field;
@@ -679,8 +718,8 @@ cm_object_t *cm_object_add_vec2(cm_object_t *field, const char *name, CM_VEC2 ve
  * Vec3
  *****************/
 
-cm_object_t* cm_create_vec3(CM_VEC3 vec, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_VEC3);
+cm_object_t* cm_create_vec3(VEC3_TYPE vec) {
+  cm_object_t *field = cm_object_create(CM_TVEC3);
   if (!field) return NULL;
 
   cm_object_set_vec3(field, vec);
@@ -688,51 +727,51 @@ cm_object_t* cm_create_vec3(CM_VEC3 vec, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_vec3_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_vec3_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (json->type != cJSON_Array) return NULL;
 
-  CM_VEC3 vec = json_to_vec3(json);
-  return cm_create_vec3(vec, meta);
+  VEC3_TYPE vec = json_to_vec3(json);
+  return cm_create_vec3(vec);
 }
 
-void cm_object_set_vec3(cm_object_t *field, CM_VEC3 vec) {
+void cm_object_set_vec3(cm_object_t *field, VEC3_TYPE vec) {
   if (!field) return;
-  if (field->type != CM_TYPE_VEC3) return;
+  if (field->type != CM_TVEC3) return;
 
   field->vec3 = vec;
 }
 
-CM_VEC3 cm_object_to_vec3(cm_object_t *field) {
+VEC3_TYPE cm_object_to_vec3(cm_object_t *field) {
   CM_ASSERT(field != NULL);
-  CM_ASSERT(field->type != CM_TYPE_VEC3);
+  CM_ASSERT(field->type != CM_TVEC3);
 
   return cm_object_to_opt_vec3(field, cm_vec3(-1, -1, -1));
 }
 
-CM_VEC3 cm_object_to_opt_vec3(cm_object_t *field, CM_VEC3 opt) {
+VEC3_TYPE cm_object_to_opt_vec3(cm_object_t *field, VEC3_TYPE opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_VEC3) return opt;
+  if (field->type != CM_TVEC3) return opt;
 
   return field->vec3;
 }
 
-CM_VEC3 cm_object_get_vec3(cm_object_t *field, const char *name) {
+VEC3_TYPE cm_object_get_vec3(cm_object_t *field, const char *name) {
   CM_ASSERT(field != NULL);
   return cm_object_get_opt_vec3(field, name, cm_vec3(-1, -1, -1));
 }
 
-CM_VEC3 cm_object_get_opt_vec3(cm_object_t *field, const char *name, CM_VEC3 opt) {
+VEC3_TYPE cm_object_get_opt_vec3(cm_object_t *field, const char *name, VEC3_TYPE opt) {
   if (!field) return opt;
   cm_object_t *item = cm_object_get(field, name);
   return cm_object_to_opt_vec3(item, opt);
 }
 
-cm_object_t *cm_object_add_vec3(cm_object_t *field, const char *name, CM_VEC3 vec3) {
+cm_object_t *cm_object_add_vec3(cm_object_t *field, const char *name, VEC3_TYPE vec3) {
   if (!field) return NULL;
   if (!name) return NULL;
 
-  cm_object_t *n_field = cm_create_vec3(vec3, NULL);
+  cm_object_t *n_field = cm_create_vec3(vec3);
   cm_object_set(field, name, n_field);
 
   return n_field;
@@ -742,8 +781,8 @@ cm_object_t *cm_object_add_vec3(cm_object_t *field, const char *name, CM_VEC3 ve
  * Vec4
  *****************/
 
-cm_object_t* cm_create_vec4(CM_VEC4 vec, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_VEC4);
+cm_object_t* cm_create_vec4(VEC4_TYPE vec) {
+  cm_object_t *field = cm_object_create(CM_TVEC4);
   if (!field) return NULL;
 
   cm_object_set_vec4(field, vec);
@@ -751,50 +790,50 @@ cm_object_t* cm_create_vec4(CM_VEC4 vec, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_vec4_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_vec4_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (json->type != cJSON_Array) return NULL;
 
-  CM_VEC4 vec = json_to_vec4(json);
-  return cm_create_vec4(vec, meta);
+  VEC4_TYPE vec = json_to_vec4(json);
+  return cm_create_vec4(vec);
 }
 
-void cm_object_set_vec4(cm_object_t *field, CM_VEC4 vec) {
+void cm_object_set_vec4(cm_object_t *field, VEC4_TYPE vec) {
   if (!field) return;
-  if (field->type != CM_TYPE_VEC4) return;
+  if (field->type != CM_TVEC4) return;
 
   field->vec4 = vec;
 }
 
-CM_VEC4 cm_object_to_vec4(cm_object_t *field) {
+VEC4_TYPE cm_object_to_vec4(cm_object_t *field) {
   CM_ASSERT(field != NULL);
 
   return cm_object_to_opt_vec4(field, cm_vec4(-1, -1, -1, -1));
 }
 
-CM_VEC4 cm_object_to_opt_vec4(cm_object_t *field, CM_VEC4 opt) {
+VEC4_TYPE cm_object_to_opt_vec4(cm_object_t *field, VEC4_TYPE opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_VEC4) return opt;
+  if (field->type != CM_TVEC4) return opt;
 
   return field->vec4;
 }
 
-CM_VEC4 cm_object_get_vec4(cm_object_t *field, const char *name) {
+VEC4_TYPE cm_object_get_vec4(cm_object_t *field, const char *name) {
   CM_ASSERT(field != NULL);
   return cm_object_get_opt_vec4(field, name, cm_vec4(-1, -1, -1, -1));
 }
 
-CM_VEC4 cm_object_get_opt_vec4(cm_object_t *field, const char *name, CM_VEC4 opt) {
+VEC4_TYPE cm_object_get_opt_vec4(cm_object_t *field, const char *name, VEC4_TYPE opt) {
   if (!field) return opt;
   cm_object_t *item = cm_object_get(field, name);
   return cm_object_to_opt_vec4(item, opt);
 }
 
-cm_object_t *cm_object_add_vec4(cm_object_t *field, const char *name, CM_VEC4 vec4) {
+cm_object_t *cm_object_add_vec4(cm_object_t *field, const char *name, VEC4_TYPE vec4) {
   if (!field) return NULL;
   if (!name) return NULL;
 
-  cm_object_t *n_field = cm_create_vec4(vec4, NULL);
+  cm_object_t *n_field = cm_create_vec4(vec4);
   cm_object_set(field, name, n_field);
 
   return n_field;
@@ -804,8 +843,8 @@ cm_object_t *cm_object_add_vec4(cm_object_t *field, const char *name, CM_VEC4 ve
  * Array
  *****************/
 
-cm_object_t* cm_create_array(cm_object_t *ref, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_ARRAY);
+cm_object_t* cm_create_array(cm_object_t *ref) {
+  cm_object_t *field = cm_object_create(CM_TARRAY);
   if (!field) return NULL;
 
   // cm_object_set_vec2(field, vec);
@@ -814,16 +853,16 @@ cm_object_t* cm_create_array(cm_object_t *ref, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_array_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_array_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (json->type != cJSON_Array) return NULL;
 
-  cm_object_t *field = cm_create_array(NULL, meta);
+  cm_object_t *field = cm_create_array(NULL);
 
 
   cJSON *item = NULL;
   cJSON_ArrayForEach(item, json) {
-    cm_object_t *aux = cm_object_from_json(item, NULL);
+    cm_object_t *aux = cm_object_from_json(item);
 
     if (aux) cm_object_push(field, -1, aux);
   }
@@ -833,7 +872,7 @@ cm_object_t *cm_array_from_json(cJSON *const json, cm_object_t *meta) {
 
 cm_object_t *cm_object_to_array(cm_object_t *field) {
   CM_ASSERT(field != NULL);
-  CM_ASSERT(field->type != CM_TYPE_ARRAY);
+  CM_ASSERT(field->type != CM_TARRAY);
 
   return cm_object_to_opt_array(field, NULL);
 }
@@ -844,7 +883,7 @@ void cm_object_set_array(cm_object_t *field, cm_object_t *array) {
 
 cm_object_t *cm_object_to_opt_array(cm_object_t *field, cm_object_t *opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_ARRAY) return opt;
+  if (field->type != CM_TARRAY) return opt;
 
   return NULL;
 }
@@ -871,25 +910,24 @@ cm_object_t* cm_object_add_array(cm_object_t *field, const char *name, cm_object
  * Object
  *****************/
 
-cm_object_t* cm_create_table(cm_object_t *ref, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_TABLE);
+cm_object_t* cm_create_table(cm_object_t *ref) {
+  cm_object_t *field = cm_object_create(CM_TTABLE);
   if (!field) return NULL;
 
   return field;
 }
 
-cm_object_t *cm_table_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_table_from_json(cJSON *const json) {
   if (!json) return NULL;
   if (json->type != cJSON_Object) return NULL;
 
-  cm_object_t *field = cm_create_table(NULL, meta);
-  // cm_object_t *meta = NULL;
+  cm_object_t *object = cm_create_table(NULL);
+  cm_object_t *meta = NULL;
 
   cJSON *json_meta = cJSON_GetObjectItem(json, CM_META_NAME);
   if (json_meta) {
-    meta = cm_object_from_json(json_meta, NULL);
-    field->meta = meta;
-    field->own_meta = 1;
+    meta = cm_object_from_json(json_meta);
+    cm_object_set_meta(object, meta);
   }
 
   cJSON *item = NULL;
@@ -900,26 +938,26 @@ cm_object_t *cm_table_from_json(cJSON *const json, cm_object_t *meta) {
     cm_object_t *meta_field = NULL;
 
     if (meta) meta_field = cm_object_get(meta, item->string);
-    cm_object_t *aux = cm_object_from_json(item, meta_field);
+    cm_object_t *aux = cm_object_from_json(item);
 
-    if (aux) cm_object_set(field, item->string, aux);
+    if (aux) cm_object_set(object, item->string, aux);
   }
 
-  return field;
+  return object;
 }
 
 void cm_object_set_table(cm_object_t *field, cm_object_t *object) {}
 
 cm_object_t *cm_object_to_object(cm_object_t *field) {
   CM_ASSERT(field != NULL);
-  CM_ASSERT(field->type != CM_TYPE_TABLE);
+  CM_ASSERT(field->type != CM_TTABLE);
 
   return cm_object_to_opt_table(field, NULL);
 }
 
 cm_object_t *cm_object_to_opt_table(cm_object_t *field, cm_object_t *opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_TABLE) return opt;
+  if (field->type != CM_TTABLE) return opt;
 
   return field;
 }
@@ -938,7 +976,7 @@ cm_object_t* cm_object_get_opt_table(cm_object_t *field, const char *name, cm_ob
 cm_object_t* cm_object_add_table(cm_object_t *field, const char *name, cm_object_t *object) {
   if (!field) return NULL;
 
-  if (!object) object = cm_create_table(NULL, NULL);
+  if (!object) object = cm_create_table(NULL);
   return cm_object_set(field, name, object);
 }
 
@@ -946,8 +984,8 @@ cm_object_t* cm_object_add_table(cm_object_t *field, const char *name, cm_object
  *    Userdata
  *=================*/
 
-cm_object_t* cm_create_userdata(void *userdata, cm_object_t *meta) {
-  cm_object_t *field = cm_object_create(CM_TYPE_USERDATA);
+cm_object_t* cm_create_userdata(void *userdata) {
+  cm_object_t *field = cm_object_create(CM_TUSERDATA);
   if (!field) return NULL;
 
   field->userdata = userdata;
@@ -955,7 +993,7 @@ cm_object_t* cm_create_userdata(void *userdata, cm_object_t *meta) {
   return field;
 }
 
-cm_object_t *cm_userdata_from_json(cJSON *const json, cm_object_t *meta) {
+cm_object_t *cm_userdata_from_json(cJSON *const json) {
   return NULL;
 }
 
@@ -963,14 +1001,14 @@ void cm_object_set_userdata(cm_object_t *field, void *userdata) {}
 
 void *cm_object_to_userdata(cm_object_t *field) {
   CM_ASSERT(field != NULL);
-  CM_ASSERT(field->type != CM_TYPE_USERDATA);
+  CM_ASSERT(field->type != CM_TUSERDATA);
 
   return cm_object_to_opt_userdata(field, NULL);
 }
 
 void *cm_object_to_opt_userdata(cm_object_t *field, void *opt) {
   if (!field) return opt;
-  if (field->type != CM_TYPE_USERDATA) return opt;
+  if (field->type != CM_TUSERDATA) return opt;
 
   return field;
 }
@@ -989,7 +1027,7 @@ void* cm_object_get_opt_userdata(cm_object_t *field, const char *name, void* opt
 cm_object_t* cm_object_add_userdata(cm_object_t *field, const char *name, void *userdata) {
   if (!field) return NULL;
 
-  cm_object_t *userdataf = cm_create_userdata(userdata, NULL);
+  cm_object_t *userdataf = cm_create_userdata(userdata);
 
   return cm_object_set(field, name, userdataf);
 }
@@ -998,9 +1036,307 @@ cm_object_t* cm_object_add_userdata(cm_object_t *field, const char *name, void *
  *      JSON      *
  *================*/
 
+static const char* ignore_chars(const char *str) {
+  while (*str == '\r' || *str == 10 || *str == '\t' || *str == '\n' || *str == ' ') str++;
+  return str;
+}
+
+static int next_char(const char *str, char ch) {
+  if (!str) return -1;
+
+  int i = 0;
+  while (*str != ch && *str  != '\0') {
+    str++;
+    i++;
+  }
+
+  // CM_TRACELOG("%s", str);
+  return (*str == '\0') ? -1 : i;
+}
+
+static char *check_content(const char *json_str, int *len) {
+  if (!json_str) return NULL;
+
+  char *init = json_str;
+  init = ignore_chars(init);
+  const char tokens[] = {',', ' ', '\n', '\r', ']', '}'};
+  // if (i)
+
+  // for (int i = 0; i < 3; i++) {
+  //   int ind = next_char(p, tokens[i]);
+  //   // CM_TRACELOG("%d", ind);
+  //   if (ind > 0) {
+  //     *len = ind;
+  //     return p;
+  //   }
+  // }
+  int index = 0;
+  char *p = init;
+  while (p) {
+    for (int i = 0; i < 5; i++) {
+      if (*p == tokens[i]) {
+        if (len) *len = index;
+        return init;
+      }
+    }
+    p++;
+    index++;
+  }
+  CM_TRACEERR("Bad formating: %s", p);
+  exit(1);
+
+  return NULL;
+}
+
+static int char_is_number(char p) {
+  int n = p - 48;
+
+  return n >= 0 || n <= 9;
+}
+
+static int str_is_boolean(char *p) {
+  CM_ASSERT(p != NULL);
+  char val[6];
+
+  if (*p != 't') {
+    memcpy(val, p, 4);
+    return !strcmp(val, "true");
+  }
+
+  if (*p != 'f') {
+    memcpy(val, p, 5);
+    return !strcmp(val, "false");
+  }
+
+  return 0;
+}
+
+static char *check_number(const char *json_str, int *len) {
+  if (!json_str) return NULL;
+  char *p = (char*)json_str;
+
+  p = (char*)ignore_chars(p);
+
+  if (char_is_number(*p)) {
+    int i = 0;
+    char *val = check_content(p, &i);
+    if (len) *len = i;
+    return p;
+  }
+
+  return NULL;
+}
+
+static char *check_string(const char *json_str, int *len) {
+  if (!json_str) return NULL;
+  char *p = json_str;
+  
+  p = ignore_chars(p);
+  if (*p == '"') {
+    p++;
+    int i = next_char(p, '"');
+    // CM_TRACELOG("%s", p+i);
+    if (i < 1) return NULL;
+    if (len) *len = i;
+    return p;
+  }
+
+  return NULL;
+}
+
+// static char *get_string
+static cm_object_t *parse_json_null(const char **json_str) {
+  CM_ASSERT(json_str != NULL);
+
+}
+
+static cm_object_t *parse_json_boolean(const char **json_str) {
+  CM_ASSERT(json_str != NULL);
+
+}
+
+
+
+static cm_object_t *parse_json_number(const char **json_str) {
+  CM_ASSERT(json_str != NULL);
+
+
+  char *init = (char*)*json_str;
+  int len = 0;
+
+
+  char *num = check_number(init, &len);
+  // num = ignore_chars(num);
+  if (!num || len <= 0) return NULL;
+
+  char val[len+1];
+  memcpy(val, num, len);
+  val[len] = '\0';
+  // CM_TRACEERR("testando");
+  // float v = strtof(val, NULL);
+
+  cm_object_t *o_num = cm_object_create(CM_TNUMBER);
+  if (strchr(val, '.')) {
+    float v = atof(val);
+    // CM_TRACELOG("%f", v);
+    cm_object_set_number(o_num, v);
+  } else {
+    int v = atoi(val);
+    o_num->number = v;
+  }
+  // CM_TRACELOG("%d %s", len, val);
+
+  // o_num =
+  // CM_TRACELOG("%f", o_num->number);
+  *json_str += len+1;
+
+  return o_num;
+}
+
+static cm_object_t *parse_json_string(const char **json_str) {
+  CM_ASSERT(json_str != NULL);
+  char *init = (char*)*json_str;
+  int len = 0;
+
+  char *str = check_string(init, &len);
+  if (!str || len <= 0) return NULL;
+
+
+  cm_object_t *o_str = cm_object_create(CM_TSTRING);
+  memcpy(o_str->string, str, len);
+  // CM_TRACELOG("%s", str);
+
+
+  *json_str = str+len+2;
+
+  return o_str;
+}
+
+static cm_object_t *parse_json_object(const char **json_str);
+static cm_object_t *parse_json_array(const char **json_str);
+
+cm_object_t *parse_json_array(const char **json_str) {
+  CM_ASSERT(json_str != NULL);
+
+  char *init = (char*)*json_str;
+  cm_object_t *obj = NULL;
+
+  char *p = init;
+  if (*p == '[') {
+    p++;
+
+    obj = cm_object_create(CM_TARRAY);
+    while (*p != ']') {
+      p = ignore_chars(p);
+      if (*p == ',') p++;
+
+      // CM_TRACELOG("%s", p);
+
+      cm_object_t *child = NULL;
+      if (*p == '{') {
+        child = parse_json_object(&p);
+      } else if (*p == '"') {
+        child = parse_json_string(&p);
+      } else if (*p == '[') {
+        child = parse_json_array(&p);
+      } else if (char_is_number(*p)) {
+        child = parse_json_number(&p);
+      } else {
+
+      }
+      // CM_
+      p = ignore_chars(p);
+
+      // CM_TRACELOG("%p %s", child, p);
+      CM_ASSERT(child != NULL);
+      // cm_object_set(obj, key, child);
+      cm_object_push(obj, -1, child);
+    }
+    p++;
+    *json_str = p;
+  }
+
+  return obj;
+}
+
+cm_object_t *parse_json_object(const char **json_str) {
+  CM_ASSERT(json_str != NULL);
+  char *init = (char*)*json_str;
+  cm_object_t *obj = NULL;
+
+  char *p = init;
+  if (*p == '{') {
+    p++;
+    obj = cm_object_create(CM_TTABLE);
+    // p = (char*)
+    while (*p != '}') {
+      p = (char*)ignore_chars(p);
+      if (*p == ',') p++;
+
+      int len = 0;
+      // CM_TRACELOG("%s", p);
+      char *name = check_string(p, &len);
+      CM_ASSERT(name != NULL);
+      CM_ASSERT(len > 0);
+
+      p = name + len + 1;
+
+      if (*p != ':') {
+        CM_TRACELOG("missing object key: %s", --name);
+        exit(1);
+      }
+      char key[len+1];
+      memcpy(key, name, len);
+      key[len] = '\0';
+      p++;
+
+      p = (char*)ignore_chars(p);
+
+      cm_object_t *child = NULL;
+      if (*p == '{') {
+        child = parse_json_object(&p);
+      } else if (*p == '"') {
+        child = parse_json_string(&p);
+      } else if (*p == '[') {
+        child = parse_json_array(&p);
+      } else if (char_is_number(*p)) {
+        child = parse_json_number(&p);
+      } else {
+
+      }
+
+      // CM_TRACELOG("%p %s", child, p);
+      CM_ASSERT(child != NULL);
+      // CM_TRACELOG("addzando %s", p);
+      cm_object_set(obj, key, child);
+
+      p = ignore_chars(p);
+
+      // if (title)
+    }
+    p++;
+    *json_str = p;
+  }
+
+  return obj;
+}
+
+cm_object_t* cm_parse_json(const char *json_string) {
+  CM_ASSERT(json_string != NULL);
+
+  const char *str = json_string;
+  cm_object_t *root = parse_json_object(&json_string);
+
+  return root;
+}
+
+const char* cm_print_json(cm_object_t *object) {
+
+}
+
 
 int json_is_valid(const char *filename) {
-  // const char *content = (const char*)filesystem_read_file(filename, NULL);
+  CM_ASSERT(vm->read_file != NULL);
   const char *content = vm->read_file(filename, "rb");
 
   cJSON *parsed = cJSON_Parse(content);
@@ -1011,7 +1347,9 @@ int json_is_valid(const char *filename) {
 }
 
 cJSON *json_open(const char *filename) {
+  CM_ASSERT(vm->read_file != NULL);
   const char *content = vm->read_file(filename, "rb");
+  cm_parse_json(content);
   cJSON *parsed = cJSON_Parse((const char*)content);
   free((char*)content);
   if (!parsed) {
@@ -1251,13 +1589,13 @@ static int json_is_vecn(cJSON *const json, int n) {
 // TRACELOG("%d: %f %f", i, vec.data[i], item->valuedouble);
 
 #define JSON_VECN(n) \
-cJSON *json_create_vec##n (CM_VEC##n vec) { \
+cJSON *json_create_vec##n (VEC##n##_TYPE vec) { \
   return json_create_vecn(vec.data, n); \
 } \
 int json_is_vec##n (cJSON *const json) { \
   return json_is_vecn(json, n); \
 } \
-void json_set_vec##n (cJSON *const json, CM_VEC##n vec) { \
+void json_set_vec##n (cJSON *const json, VEC##n##_TYPE vec) { \
   CM_ASSERT(json != NULL); \
   if (!json_is_vec##n(json)) return; \
   for (int i = 0; i < n; i++) { \
@@ -1266,20 +1604,20 @@ void json_set_vec##n (cJSON *const json, CM_VEC##n vec) { \
     json_set_number(item, vec.data[i]); \
   } \
 } \
-CM_VEC##n json_to_vec##n (cJSON *const json) { \
-	CM_ASSERT(json != NULL); \
-	CM_VEC##n opt = {-1}; \
+VEC##n##_TYPE json_to_vec##n (cJSON *const json) { \
+  CM_ASSERT(json != NULL); \
+  VEC##n##_TYPE opt = {-1}; \
   return json_opt_vec##n (json, opt); \
 } \
-CM_VEC##n json_opt_vec##n (cJSON *const json, CM_VEC##n opt) { \
-	if (!json) return opt; \
+VEC##n##_TYPE json_opt_vec##n (cJSON *const json, VEC##n##_TYPE opt) { \
+  if (!json) return opt; \
   if (!json_is_vecn(json, n)) return opt; \
   for (int i = 0; i < n; i++) { \
     opt.data[i] = json_get_number(json, NULL, i); \
   } \
   return opt; \
 } \
-cJSON *json_add_vec##n (cJSON *const json, const char *name, CM_VEC##n vec) { \
+cJSON *json_add_vec##n (cJSON *const json, const char *name, VEC##n##_TYPE vec) { \
   cJSON *value = json_get_item(json, name, 0); \
   if (value) { \
     json_set_vec##n(value, vec); \
@@ -1290,12 +1628,12 @@ cJSON *json_add_vec##n (cJSON *const json, const char *name, CM_VEC##n vec) { \
   json_delete(value); \
   return NULL; \
 } \
-CM_VEC##n json_get_vec##n (cJSON *const json, const char *name, int index) { \
-  CM_VEC##n opt; \
-  memset(&opt, -1, sizeof(CM_VEC##n)); \
+VEC##n##_TYPE json_get_vec##n (cJSON *const json, const char *name, int index) { \
+  VEC##n##_TYPE opt; \
+  memset(&opt, -1, sizeof(VEC##n##_TYPE)); \
   return json_get_opt_vec##n (json, name, index, opt); \
 } \
-CM_VEC##n json_get_opt_vec##n (cJSON *const json, const char *name, int index, CM_VEC##n opt) { \
+VEC##n##_TYPE json_get_opt_vec##n (cJSON *const json, const char *name, int index, VEC##n##_TYPE opt) { \
   cJSON *item = json_get_item(json, name, index); \
   if (!item) return opt; \
   return json_opt_vec##n(item, opt); \

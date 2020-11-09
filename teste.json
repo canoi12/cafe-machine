@@ -1,7 +1,18 @@
 {
-	"transform": {
-		"position": [9601, 0],
-		"scale": [25, 1],
-		"angle": 25
-	}
+	"transform": {},
+	"teste": "testando",
+	"number": 10,
+	"obj": {
+		"opa": 908
+	},
+	"qqq": [
+		"opa",
+		"qqqqqqqqq",
+		"boto fe que vai dar certo",
+		10,
+		20,
+		{
+			"trace": "log"
+		}
+	]
 }
