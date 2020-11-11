@@ -57,7 +57,7 @@ int main(int argc, char ** argv) {
 	cm_init();
 	coffee_machine_t *vm = cm_get_vm();
 
-	cm_object_t *tst = cm_object_load("sum.json");
+	cm_object_t *tst = cm_object_load("json/sum.json");
 
 	cm_pushcfunction(vm, &sum_json);
 	cm_pushnumber(vm, cm_object_get_number(tst, "arg0"));
@@ -67,7 +67,7 @@ int main(int argc, char ** argv) {
 	cm_call(vm, 3, 1);
 
 	float n = cm_tonumber(vm, 0);
-	CM_TRACELOG("%f", n);
+	CM_TRACELOG("%.0f", n);
 	cm_deinit();
 	return 0;
 }
