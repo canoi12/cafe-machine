@@ -1,3 +1,5 @@
 vm
-transform.coffee
+*.coffee
 project.tico
+*.sublime-project
+*.json
