@@ -1,5 +1,5 @@
 CC = gcc
-SOURCE = main.c coffee.c external/cJSON.c
+SOURCE = main.c coffee.c
 CFLAGS = -std=c99
 LFLAGS = -Wall
 OUT = vm

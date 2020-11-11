@@ -13,19 +13,61 @@ int check_player(cm_object_t *object) {
 	return 0;
 }
 
+int sum(coffee_machine_t *vm) {
+	int top = cm_gettop(vm);
+	float total = 0;
+
+	for (int i = 1; i < top; i++) {
+		total += cm_tonumber(vm, i);
+	}
+
+	cm_pushnumber(vm, total);
+	return 1;
+}
+
+enum {
+	OP_NONE = 0,
+	OP_SUM,
+	OP_MUL,
+	OP_SUB
+};
+
+int sum_json(coffee_machine_t *vm) {
+	float n1 = cm_tonumber(vm, 1);
+	int op = cm_tonumber(vm, 2);
+	float n2 = cm_tonumber(vm, 3);
+	float res = 0;
+	switch (op) {
+		case OP_SUM:
+			res = n1 + n2;
+			break;
+		case OP_MUL:
+			res = n1 * n2;
+			break;
+		case OP_SUB:
+			res = n1 - n2;
+			break;
+	}
+
+	cm_pushnumber(vm, res);
+	return 1;
+}
+
 int main(int argc, char ** argv) {
-	cm_vm_init();
+	cm_init();
+	coffee_machine_t *vm = cm_get_vm();
 
-	cm_object_t *obj = cm_object_load("teste.json");
+	cm_object_t *tst = cm_object_load("sum.json");
 
-	cm_object_add_string(obj, "coffe-machine", "123321321123123");
+	cm_pushcfunction(vm, &sum_json);
+	cm_pushnumber(vm, cm_object_get_number(tst, "arg0"));
+	cm_pushnumber(vm, cm_object_get_number(tst, "op"));
+	cm_pushnumber(vm, cm_object_get_number(tst, "arg1"));
 
-	const char *print = cm_print_json(obj);
-	CM_TRACELOG("%s", print);
+	cm_call(vm, 3, 1);
 
-	cm_vm_t *vm = cm_get_vm();
-	vm->write_file("bora.json", print, 0, "wb");
-
-	cm_vm_deinit();
+	float n = cm_tonumber(vm, 0);
+	CM_TRACELOG("%f", n);
+	cm_deinit();
 	return 0;
 }

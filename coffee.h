@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "external/cJSON.h"
 
 #define CM_VERSION "0.1.0"
 #define COFEE_MACHINE_VERSION CM_VERSION
@@ -62,6 +61,12 @@
 #define cm_vec4(x, y, z, w) ((VEC4_TYPE){(x), (y), (w), (w)})
 
 
+#define CM_META       "__meta__"
+#define CM_META_INDEX "__index__"
+#define CM_META_NAME  "__name__"
+#define CM_META_TYPE  "__type__"
+
+
 #define cm_vec_t(n) \
   struct cm_vec##n##_t { \
     float data[n]; \
@@ -78,10 +83,10 @@ typedef int cm_bool_t;
 #define CM_FUNCTION_DEF(func_name, ...) \
 func_name (cm_object_t *type, __VA_ARGS__)
 
+// CM_API cm_object_t* cm_##name_p##_from_json(cJSON *json); \
+// CM_API cJSON* cm_##name_p##_to_json(cm_object_t *object, int export_meta);
 #define CM_TDEF(name_p, type_t) \
 CM_API cm_object_t* cm_create_##name_p(type_t value); \
-CM_API cm_object_t* cm_##name_p##_from_json(cJSON *json); \
-CM_API cJSON* cm_##name_p##_to_json(cm_object_t *object, int export_meta); \
 CM_API type_t cm_object_get_##name_p(cm_object_t *object, const char *name); \
 CM_API type_t cm_object_get_opt_##name_p(cm_object_t *object, const char *name, type_t opt); \
 CM_API cm_object_t* cm_object_add_##name_p(cm_object_t *object, const char *name, type_t value); \
@@ -90,8 +95,10 @@ CM_API type_t cm_object_to_opt_##name_p(cm_object_t *object, type_t value); \
 CM_API void cm_object_set_##name_p(cm_object_t *object, type_t value); \
 
 
+typedef struct coffee_machine_t coffee_machine_t;
 typedef struct cm_object_t cm_object_t;
 // typedef struct cm_coffee_t cm_coffee_t;
+typedef int(*cm_function)(coffee_machine_t*);
 
 typedef enum {
   CM_TNULL = 0,
@@ -103,43 +110,46 @@ typedef enum {
   CM_TVEC4,
   CM_TARRAY,
   CM_TTABLE,
-  CM_TCUSTOM,
   CM_TUSERDATA,
+  CM_TFUNCTION,
   CM_TREFERENCE,
   CM_TMAX
 } CM_T_;
 
-typedef cm_object_t*(*loadFromJson)(cJSON*);
-typedef cm_object_t*(*exportToJson)(cJSON*);
-
 #define MAX_STACK 256
 
-typedef struct coffee_vm_t {
+typedef struct cm_hashmap_t {
+
+} cm_hashmap_t;
+
+struct coffee_machine_t {
   cm_object_t *root;
   cm_object_t *gc;
 
   cm_object_t* stack[MAX_STACK];
   int stack_index;
+  int fp;
 
   const char*(*read_file)(const char *, const char*);
   void(*write_file)(const char *, const char *, size_t, const char*);
-} cm_vm_t;
+};
 
 struct cm_object_t {
   CM_T_ type;
-  char name[128];
+  unsigned char marked;
+  char *name;
   cm_object_t *meta;
-  int own_meta;
 
   union {
     float number;
-    char string[256];
+    char *string;
     int boolean;
     VEC2_TYPE vec2;
     VEC3_TYPE vec3;
     VEC4_TYPE vec4;
-    cm_object_t *ref;
     void *userdata;
+    cm_object_t *ref;
+    cm_function* func;
   };
 
   cm_object_t *prev;
@@ -156,41 +166,98 @@ extern "C" {
  *         VM          *
  *=====================*/
 
-CM_API int cm_vm_init();
-CM_API void cm_vm_deinit();
-CM_API cm_vm_t* cm_get_vm();
-CM_API void cm_vm_gc();
+CM_API int cm_init();
+CM_API void cm_deinit();
+CM_API coffee_machine_t* cm_get_vm();
+CM_API void cm_gc();
 
-CM_API const char* cm_vm_version();
+CM_API const char* cm_version();
 
-CM_API void cm_vm_push(cm_object_t *obj);
-CM_API cm_object_t *cm_vm_pop();
+CM_API cm_object_t* cm_get_type(const char *type_name);
+CM_API cm_object_t* cm_set_type(const char *type_name, cm_object_t *type);
 
-CM_API cm_object_t* cm_vm_get_type(const char *type_name);
-CM_API cm_object_t* cm_vm_set_type(const char *type_name, cm_object_t *type);
+CM_API cm_object_t* cm_get_object(const char *name);
+CM_API cm_object_t* cm_set_object(const char *name, cm_object_t *object);
 
-CM_API cm_object_t* cm_vm_get_object(const char *name);
-CM_API cm_object_t* cm_vm_set_object(const char *name, cm_object_t *object);
+CM_API int cm_call(coffee_machine_t *vm, int args, int ret);
+CM_API void cm_settop(coffee_machine_t *vm, int top);
+CM_API int cm_gettop(coffee_machine_t *vm);
 
-// CM_API cm_object_t* cm_object_get_path(cm_object_t *object, const char *path);
-// CM_API void cm_object_set_path(cm_object_t *object, const char *path, cm_object_t *item);
-// CM_API void cm_object_clear_path(cm_object_t *object, const char *path);
-// CM_API void cm_object_delete_path(cm_object_t *object, const char *path);
-// CM_API void cm_object_push_to_path(cm_object_t *object, const char *path, cm_object_t *item);
+CM_API void cm_push(coffee_machine_t *vm, cm_object_t *obj);
+CM_API cm_object_t *cm_pop(coffee_machine_t *vm);
+CM_API cm_object_t *cm_get(coffee_machine_t *vm, int index);
+
+CM_API void cm_newtable(coffee_machine_t *vm);
+CM_API void cm_setmetatable(coffee_machine_t *vm);
+CM_API void cm_getmetatable(coffee_machine_t *vm);
+CM_API void cm_newarray(coffee_machine_t *vm);
+
+CM_API void cm_pushnumber(coffee_machine_t *vm, float number);
+CM_API void cm_pushstring(coffee_machine_t *vm, const char *string);
+CM_API void cm_pushboolean(coffee_machine_t *vm, int boolean);
+CM_API void cm_pushvec2(coffee_machine_t *vm, VEC2_TYPE vec2);
+CM_API void cm_pushvec3(coffee_machine_t *vm, VEC3_TYPE vec3);
+CM_API void cm_pushvec4(coffee_machine_t *vm, VEC4_TYPE vec4);
+CM_API void cm_pushcfunction(coffee_machine_t *vm, cm_function *fn);
+// CM_API void cm_pushtable(coffee_machine_t *vm);
+CM_API void cm_pushvalue(coffee_machine_t *vm, int index);
+
+CM_API float cm_tonumber(coffee_machine_t *vm, int index);
+CM_API const char* cm_tostring(coffee_machine_t *vm, int index);
+CM_API int cm_toboolean(coffee_machine_t *vm, int index);
+CM_API VEC2_TYPE cm_tovec2(coffee_machine_t *vm, int index);
+CM_API VEC3_TYPE cm_tovec3(coffee_machine_t *vm, int index);
+CM_API VEC4_TYPE cm_tovec4(coffee_machine_t *vm, int index);
+CM_API cm_object_t* cm_toobject(coffee_machine_t *vm, int index);
+CM_API void *cm_touserdata(coffee_machine_t *vm, int index);
+CM_API cm_object_t* cm_toref(coffee_machine_t *vm, int index);
+CM_API cm_function* cm_tofunction(coffee_machine_t *vm, int index);
+
+CM_API float cm_checknumber(coffee_machine_t *vm, int index);
+CM_API const char* cm_checkstring(coffee_machine_t *vm, int index);
+CM_API int cm_checkboolean(coffee_machine_t *vm, int index);
+CM_API VEC2_TYPE cm_checkvec2(coffee_machine_t *vm, int index);
+CM_API VEC3_TYPE cm_checkvec3(coffee_machine_t *vm, int index);
+CM_API VEC4_TYPE cm_checkvec4(coffee_machine_t *vm, int index);
+CM_API cm_object_t* cm_checkobject(coffee_machine_t *vm, int index);
+CM_API void *cm_checkudata(coffee_machine_t *vm, int index);
+CM_API cm_object_t* cm_checkref(coffee_machine_t *vm, int index);
+CM_API cm_function* cm_checkfunction(coffee_machine_t *vm, int index);
+
+CM_API float cm_optnumber(coffee_machine_t *vm, int index, float opt);
+CM_API const char* cm_optstring(coffee_machine_t *vm, int index, const char *opt);
+CM_API int cm_optboolean(coffee_machine_t *vm, int index, int opt);
+CM_API VEC2_TYPE cm_optvec2(coffee_machine_t *vm, int index, VEC2_TYPE opt);
+CM_API VEC3_TYPE cm_optvec3(coffee_machine_t *vm, int index, VEC3_TYPE opt);
+CM_API VEC4_TYPE cm_optvec4(coffee_machine_t *vm, int index, VEC4_TYPE opt);
+CM_API cm_object_t* cm_optobject(coffee_machine_t *vm, int index, cm_object_t *opt);
+CM_API void *cm_optudata(coffee_machine_t *vm, int index, void *opt);
+CM_API cm_object_t* cm_optref(coffee_machine_t *vm, int index, cm_object_t *opt);
+CM_API cm_function* cm_optfunction(coffee_machine_t *vm, int index, cm_function *opt);
 
 /*======================*
  *        Coffee        *
  *======================*/
 
 CM_API cm_object_t* cm_parse_json(const char *json_string);
-CM_API const char* cm_print_json(cm_object_t *object);
+// CM_API cm_object_t* cm_load_coffee_from_json(const char *json_string);
+CM_API const char* cm_print_json(cm_object_t *object, int *char_count_out);
+CM_API cm_object_t* cm_json_to_coffee(cm_object_t *object);
+
 CM_API cm_object_t* cm_parse_coffee(const char *coffee_string);
 CM_API const char* cm_print_coffee(cm_object_t *object);
 
+CM_API void cm_object_get_uid(cm_object_t *obj, char *out);
+
+CM_API void cm_object_print(cm_object_t *obj);
+
 CM_API cm_object_t* cm_object_create(CM_T_ type);
 CM_API cm_object_t* cm_object_load(const char *path);
+CM_API cm_object_t* cm_object_clone(cm_object_t *obj);
+CM_API cm_object_t* cm_object_replace(cm_object_t *obj, const char *name, cm_object_t *new_item);
 // CM_API cm_object_t* cm_object_load_from_
-CM_API cm_object_t* cm_object_from_json(cJSON *const json);
+// CM_API cm_object_t* cm_object_from_json(cJSON *const json);
+CM_API void cm_object_remove(cm_object_t *object, const char *name);
 CM_API void cm_object_delete(cm_object_t *object);
 CM_API void cm_object_clear(cm_object_t *object);
 
@@ -200,6 +267,9 @@ CM_API cm_object_t* cm_object_get_meta(cm_object_t *object);
 CM_API void cm_object_set_type(cm_object_t *object, CM_T_ type);
 CM_API CM_T_ cm_object_get_type(cm_object_t *object);
 
+CM_API void cm_object_set_name(cm_object_t *object, const char *name);
+CM_API const char* cm_object_get_name(cm_object_t *object);
+
 CM_API cm_object_t* cm_object_get(cm_object_t *object, const char *name);
 CM_API cm_object_t* cm_object_set(cm_object_t *object, const char *name, cm_object_t *item);
 CM_API void cm_object_push(cm_object_t *object, int index, cm_object_t *item);
@@ -207,7 +277,15 @@ CM_API cm_object_t* cm_object_pop(cm_object_t *object);
 CM_API cm_object_t* cm_object_add(cm_object_t *object, const char *name, cm_object_t *item);
 CM_API int cm_object_length(cm_object_t *object);
 
-CM_API cm_object_t* cm_vec2_array_from_json(cJSON *const json);
+CM_API void cm_array_to_vec2(cm_object_t *array);
+CM_API void cm_array_to_vec3(cm_object_t *array);
+CM_API void cm_array_to_vec4(cm_object_t *array);
+
+CM_API cm_object_t* cm_vec2_from_array(cm_object_t *array);
+CM_API cm_object_t* cm_vec3_from_array(cm_object_t *array);
+CM_API cm_object_t* cm_vec4_from_array(cm_object_t *array);
+
+CM_API cm_object_t* cm_create_null();
 
 CM_TDEF(number, float);
 CM_TDEF(string, const char*);
@@ -218,46 +296,8 @@ CM_TDEF(vec4, VEC4_TYPE);
 CM_TDEF(array, cm_object_t*);
 CM_TDEF(table, cm_object_t*);
 CM_TDEF(userdata, void*);
-
-/*===============*
- *     JSON      *
- *===============*/
-
-#define JSON_TYPE(name_t, type_t) \
-CM_API cJSON* json_create_##name_t (type_t value); \
-CM_API int json_is_##name_t (cJSON *const json); \
-CM_API void json_set_##name_t (cJSON *const json, type_t value); \
-CM_API type_t json_to_##name_t (cJSON *const json); \
-CM_API type_t json_opt_##name_t (cJSON *const json, type_t opt); \
-CM_API cJSON* json_add_##name_t (cJSON *const json, const char *name, type_t value); \
-CM_API type_t json_get_##name_t (cJSON *const json, const char *name, int index); \
-CM_API type_t json_get_opt_##name_t (cJSON *const json, const char *name, int index, type_t opt)
-
-CM_API int json_is_valid(const char *filename);
-CM_API cJSON* json_open(const char *filename);
-CM_API cJSON* json_parse(const char *jsonStr);
-CM_API cJSON* json_clone(cJSON *src);
-CM_API void json_save(const char *filename, cJSON* const json);
-CM_API char* json_print(cJSON* const json);
-
-CM_API cJSON* json_create();
-CM_API void json_delete(cJSON* const json);
-
-CM_API int json_add_item(cJSON *const json, const char *name, cJSON *const item);
-CM_API cJSON *json_get_item(cJSON *const json, const char *name, int index);
-
-
-JSON_TYPE(string, const char*);
-JSON_TYPE(number, float);
-JSON_TYPE(boolean, int);
-JSON_TYPE(vec2, VEC2_TYPE);
-JSON_TYPE(vec3, VEC3_TYPE);
-JSON_TYPE(vec4, VEC4_TYPE);
-JSON_TYPE(array, const cJSON*);
-JSON_TYPE(int_array, int*);
-JSON_TYPE(object, const cJSON*);
-
-CM_API int json_get_array_size(const cJSON* json);
+CM_TDEF(function, cm_function*);
+CM_TDEF(reference, cm_object_t*);
 
 /*===============*
  *     Debug     *

@@ -1,26 +1,22 @@
 #include "coffee.h"
 
-#define CM_META_TYPE "__type__"
+// #define CM_META_TYPE "__type__"
 
-#define CM_HEADER_NAME "__header__"
-#define CM_DATA_NAME "__data__"
-#define CM_META_NAME "__meta__"
-
-#define CM_META_TYPE "__type__"
-
-#define CM_META_COLOR "__color__"
-#define CM_META_FORMAT "__format__"
-#define CM_META_V_MIN "__v_min__"
-#define CM_META_V_MAX "__v_max__"
-#define CM_META_SPEED "__speed__"
-#define CM_META_RES_TYPE "__res_type__"
-#define CM_META_LOCAL_POS "__local_pos__"
+// #define CM_HEADER_NAME "__header__"
+// #define CM_DATA_NAME "__data__"
+// #define CM_META_COLOR "__color__"
+// #define CM_META_FORMAT "__format__"
+// #define CM_META_V_MIN "__v_min__"
+// #define CM_META_V_MAX "__v_max__"
+// #define CM_META_SPEED "__speed__"
+// #define CM_META_RES_TYPE "__res_type__"
+// #define CM_META_LOCAL_POS "__local_pos__"
 
 #define CHECK_VM(vm) \
   CM_ASSERT(vm != NULL); \
   CM_ASSERT(vm->root != NULL)
 
-cm_vm_t *vm;
+coffee_machine_t *vm;
 
 const struct {
   const char *name;
@@ -35,8 +31,8 @@ const struct {
   {"vec4",   CM_TVEC4},
   {"array", CM_TARRAY},
   {"table", CM_TTABLE},
-  {"custom", CM_TCUSTOM},
   {"userdata", CM_TUSERDATA},
+  {"function", CM_TFUNCTION},
   {"reference", CM_TREFERENCE}
 };
 
@@ -51,43 +47,7 @@ static int get_type_from_string(const char *string) {
   return CM_TNULL;
 }
 
-int get_type_from_cjson_type(int cjson_type, cJSON *const json) {
-  int type = CM_TNULL;
-  switch (cjson_type) {
-    case cJSON_Number:
-      type = CM_TNUMBER;
-      break;
-    case cJSON_True:
-      type = CM_TBOOLEAN;
-      break;
-    case cJSON_False:
-      type = CM_TBOOLEAN;
-      break;
-    case cJSON_String:
-      type = CM_TSTRING;
-      break;
-    case cJSON_Object:
-      type = CM_TTABLE;
-      break;
-    case cJSON_Array:
-      // {
-      //   int sz = -1;
-      //   if (json) sz = cJSON_GetArraySize(json);
-      //   if (sz == 2) type = CM_TVEC2;
-      //   else if (sz == 3) type = CM_TVEC3;
-      //   else if (sz == 4) type = CM_TVEC4;
-      //   else type = CM_TARRAY;
-      // }
-      type = CM_TARRAY;
-      break;
-    default:
-      type = CM_TCUSTOM;
-  }
-
-  return type;
-}
-
-static void cm_get_uid(cm_object_t *object, char *uid) {
+void cm_object_get_uid(cm_object_t *object, char *uid) {
   CHECK_VM(vm);
   sprintf(uid, "%s##", object->name);
 
@@ -127,12 +87,52 @@ void write_file(const char *filename, const char *string, size_t size, const cha
   fclose(fp);
 }
 
+// #define cm_vecn_impl_old(n) \
+// cm_object_t *cm_vec##n##_from_array(cm_object_t *array) { \
+//   CM_ASSERT(array != NULL); \
+//   int len = cm_object_length(array); \
+//   if (len != n) return NULL; \
+//   VEC##n##_TYPE v_data; \
+//   cm_object_t *iter = NULL; \
+//   int i = 0; \
+//   cm_object_foreach(iter, array) { \
+//   if (iter->type != CM_TNUMBER) return NULL; \
+//     v_data.data[i++] = iter->number; \
+//   }\
+//   cm_object_t *vec = cm_object_create(CM_TVEC##n); \
+//   cm_object_set_vec##n(vec, v_data); \
+//   return vec; \
+// }
+
+#define cm_vecn_impl(n) \
+void cm_array_to_vec##n(cm_object_t *array) { \
+  CM_ASSERT(array != NULL); \
+  int len = cm_object_length(array); \
+  if (len != n) return; \
+  cm_object_t *iter = NULL; \
+  array->type = CM_TVEC##n; \
+  int i = 0; \
+  cm_object_foreach(iter, array) { \
+  if (iter->type != CM_TNUMBER) return; \
+    array->vec##n.data[i++] = iter->number; \
+  } \
+  cm_object_clear(array); \
+}
+
+cm_vecn_impl(2);
+cm_vecn_impl(3);
+cm_vecn_impl(4);
+
+cm_object_t* cm_array_to_vec(cm_object_t *array) {
+  return NULL;
+}
+
 
 /*===================*
  *        VM         *
  *===================*/
 
-int cm_vm_init() {
+int cm_init() {
   vm = CM_CALLOC(1, sizeof(*vm));
   if (!vm) return 0;
 
@@ -140,28 +140,30 @@ int cm_vm_init() {
   vm->gc = cm_object_create(CM_TTABLE);
   vm->read_file = read_file;
   vm->write_file = write_file;
+  vm->stack_index = 0;
+  vm->fp = 0;
   cm_object_add_table(vm->root, CM_META_TYPE, NULL);
 
   return 1;
 }
 
-void cm_vm_deinit() {
+void cm_deinit() {
   cm_object_delete(vm->root);
   cm_object_delete(vm->gc);
   CM_FREE(vm);
 }
 
-cm_vm_t* cm_get_vm() {
+coffee_machine_t* cm_get_vm() {
   CHECK_VM(vm);
   return vm;
 }
 
-void cm_vm_gc() {
+void cm_gc() {
   CHECK_VM(vm);
   cm_object_clear(vm->gc);
 }
 
-cm_object_t *cm_vm_set_type(const char *typename, cm_object_t* type) {
+cm_object_t *cm_set_type(const char *typename, cm_object_t* type) {
   CHECK_VM(vm);
   if (!typename) return NULL;
   cm_object_t *types = cm_object_get(vm->root, typename);
@@ -170,7 +172,7 @@ cm_object_t *cm_vm_set_type(const char *typename, cm_object_t* type) {
   return cm_object_set(types, typename, type);
 }
 
-cm_object_t *cm_vm_get_type(const char *typename) {
+cm_object_t *cm_get_type(const char *typename) {
   CHECK_VM(vm);
   if (!typename) return NULL;
 
@@ -180,28 +182,338 @@ cm_object_t *cm_vm_get_type(const char *typename) {
   return type;
 }
 
-cm_object_t* cm_vm_get_object(const char *name) {
+cm_object_t* cm_get_object(const char *name) {
   if (!name) return NULL;
   const char *part = strstr(name, "//");
-  int sz = strlen(name);
-  if (part) sz = part - name;
+  int sz = strlen(name)+1;
+  if (part) sz = part - name + 1;
 
   char key[sz];
   memcpy(key, name, sz);
+  key[sz] = '\0';
   cm_object_t *obj = cm_object_get(vm->root, key);
   if (part) return cm_object_get(obj, part+2);
 
+  return obj;
+}
+
+cm_object_t* cm_set_object(const char *name, cm_object_t *object) {
   return NULL;
 }
 
-cm_object_t* cm_vm_set_object(const char *name, cm_object_t *object) {
-  return NULL;
+int cm_call(coffee_machine_t *vm, int nargs, int nres) {
+  // cm_object_t *fn = cm_pop(vm);
+  // if (!fn) return 0;
+  int top = vm->stack_index;
+  vm->fp = top-nargs-1;
+  // if (top < nargs) return 0;
+
+  // vm->stack_index = 0;
+  // for (int i = 0; i < nargs; i++) {
+  //   cm_pushvalue(vm, top-i);
+  // }
+
+  // fn->((cm_function)func)(vm);
+  // cm_function *func = fn->func;
+  // stack
+  cm_object_t *fn = cm_get(vm, 0);
+
+
+  // if (func) func(vm);
+  cm_object_t *res = NULL;
+  if (fn && fn->func) {
+    cm_function *func = fn->func;
+    ((cm_function)func)(vm);
+    res = cm_pop(vm);
+  }
+  vm->stack_index = vm->fp;
+  if (res) cm_push(vm, res);
+  return nres;
+}
+
+void cm_settop(coffee_machine_t *vm, int top) {
+  vm->fp = vm->fp + top;
+}
+int cm_gettop(coffee_machine_t *vm) {
+  return vm->stack_index - vm->fp;
+}
+
+void cm_push(coffee_machine_t *vm, cm_object_t *obj) {
+  CM_ASSERT(vm != NULL);
+  CM_ASSERT(vm->stack_index < MAX_STACK);
+  // CM_TRACELOG("%p", obj->func);
+  vm->stack[vm->stack_index++] = obj;
+}
+
+cm_object_t *cm_pop(coffee_machine_t *vm) {
+  CM_ASSERT(vm != NULL);
+  CM_ASSERT(vm->stack_index > 0);
+  return vm->stack[--vm->stack_index];
+}
+
+cm_object_t *cm_get(coffee_machine_t *vm, int index) {
+  CM_ASSERT(vm != NULL);
+  int i = vm->fp + index;
+  if (index < 0) i = vm->fp - index;
+  CM_ASSERT(i >= 0 && i < MAX_STACK);
+
+  return vm->stack[i];
+}
+
+void cm_newtable(coffee_machine_t *vm) {
+  cm_object_t *object = cm_create_table(NULL);
+  cm_push(vm, object);
+}
+
+void cm_setmetatable(coffee_machine_t *vm) {
+  // cm_checktable
+}
+
+void cm_getmetatable(coffee_machine_t *vm) {}
+
+/*********
+ * Push
+ *********/
+
+void cm_pushnull(coffee_machine_t *vm) {
+  cm_object_t *null = cm_create_null();
+  cm_push(vm, null);
+}
+
+void cm_pushnumber(coffee_machine_t *vm, float value) {
+  cm_object_t *number = cm_create_number(value);
+  cm_push(vm, number);
+}
+void cm_pushstring(coffee_machine_t *vm, const char *string) {
+  cm_object_t *str = cm_create_string(string);
+  cm_push(vm, str);
+}
+void cm_pushboolean(coffee_machine_t *vm, int value) {
+  cm_object_t *boolean = cm_create_boolean(value);
+  cm_push(vm, boolean);
+}
+void cm_pushvec2(coffee_machine_t *vm, VEC2_TYPE value) {
+  cm_object_t *vec2 = cm_create_vec2(value);
+  cm_push(vm, vec2);
+}
+void cm_pushvec3(coffee_machine_t *vm, VEC3_TYPE value) {
+  cm_object_t *vec3 = cm_create_vec3(value);
+  cm_push(vm, vec3);
+}
+void cm_pushvec4(coffee_machine_t *vm, VEC4_TYPE value) {
+  cm_object_t *vec4 = cm_create_vec4(value);
+  cm_push(vm, vec4);
+}
+// void cm_pushtable(coffee_machine_t *vm);
+void cm_pushvalue(coffee_machine_t *vm, int index) {
+  cm_object_t *val = cm_get(vm, index);
+  if (!val) val = cm_create_null();
+  cm_push(vm, val);
+}
+void cm_pushcfunction(coffee_machine_t *vm, cm_function* fn) {
+  cm_object_t *val = cm_create_function(fn);
+  if (!val) val = cm_create_null();
+  // CM_TRACELOG("%p", val);
+  cm_push(vm, val);
+}
+
+/**********
+ * To
+ **********/
+
+float cm_tonumber(coffee_machine_t *vm, int index) {
+  return cm_optnumber(vm, index, -1);
+}
+const char* cm_tostring(coffee_machine_t *vm, int index) {
+  return cm_optstring(vm, index, NULL);
+}
+int cm_toboolean(coffee_machine_t *vm, int index) {
+  return cm_optboolean(vm, index, -1);
+}
+VEC2_TYPE cm_tovec2(coffee_machine_t *vm, int index) {
+  return cm_optvec2(vm, index, (VEC2_TYPE){-1, -1});
+}
+VEC3_TYPE cm_tovec3(coffee_machine_t *vm, int index) {
+  return cm_optvec3(vm, index, (VEC3_TYPE){-1, -1, -1});
+}
+VEC4_TYPE cm_tovec4(coffee_machine_t *vm, int index) {
+  return cm_optvec4(vm, index, (VEC4_TYPE){-1, -1, -1, -1});
+}
+cm_object_t* cm_toobject(coffee_machine_t *vm, int index) {
+  return cm_optobject(vm, index, NULL);
+}
+void *cm_touserdata(coffee_machine_t *vm, int index) {
+  return cm_optudata(vm, index, NULL);
+}
+cm_object_t* cm_toref(coffee_machine_t *vm, int index) {
+  return cm_optref(vm, index, NULL);
+}
+cm_function* cm_tofunction(coffee_machine_t *vm, int index) {
+  return cm_optfunction(vm, index, NULL);
+}
+
+cm_object_t *cm_checktype(coffee_machine_t *vm, int index, CM_T_ type) {
+  cm_object_t *obj = cm_get(vm, index);
+  if (!obj) return NULL;
+  // if (obj->type != type) return NULL;
+  CM_ASSERT(obj->type != type);
+
+  return obj;
+}
+
+/**********
+ * Check
+ **********/
+
+float cm_checknumber(coffee_machine_t *vm, int index) {
+  cm_object_t *n = cm_checktype(vm, index, CM_TNUMBER);
+  return n->number;
+}
+const char* cm_checkstring(coffee_machine_t *vm, int index) {
+  cm_object_t *s = cm_checktype(vm, index, CM_TSTRING);
+  return s->string;
+}
+int cm_checkboolean(coffee_machine_t *vm, int index) {
+  cm_object_t *b = cm_checktype(vm, index, CM_TBOOLEAN);
+  return b->boolean;
+}
+VEC2_TYPE cm_checkvec2(coffee_machine_t *vm, int index) {
+  cm_object_t *v = cm_checktype(vm, index, CM_TVEC2);
+  return v->vec2;
+}
+VEC3_TYPE cm_checkvec3(coffee_machine_t *vm, int index) {
+  cm_object_t *v = cm_checktype(vm, index, CM_TVEC3);
+  return v->vec3;
+}
+VEC4_TYPE cm_checkvec4(coffee_machine_t *vm, int index) {
+  cm_object_t *v = cm_checktype(vm, index, CM_TVEC4);
+  return v->vec4;
+}
+cm_object_t* cm_checkobject(coffee_machine_t *vm, int index) {
+  cm_object_t *obj = cm_get(vm, index);
+  CM_ASSERT(obj != NULL);
+  return obj;
+}
+void *cm_checkudata(coffee_machine_t *vm, int index) {
+  cm_object_t *u = cm_checktype(vm, index, CM_TUSERDATA);
+  return u->userdata;
+}
+cm_object_t* cm_checkref(coffee_machine_t *vm, int index) {
+  cm_object_t *r = cm_checktype(vm, index, CM_TREFERENCE);
+  return r->ref;
+}
+cm_function* cm_checkfunction(coffee_machine_t *vm, int index) {
+  cm_object_t *f = cm_checktype(vm, index, CM_TFUNCTION);
+  return f->func;
+}
+
+/*********
+ * Opt
+ *********/
+
+float cm_optnumber(coffee_machine_t *vm, int index, float opt) {
+  cm_object_t *number = cm_get(vm, index);
+  if (!number) return opt;
+  if (number->type != CM_TNUMBER) return opt;
+
+  return number->number;
+}
+const char* cm_optstring(coffee_machine_t *vm, int index, const char *opt) {
+  cm_object_t *str = cm_get(vm, index);
+  if (!str) return opt;
+  if (str->type != CM_TSTRING) return opt;
+
+  return str->string;
+}
+int cm_optboolean(coffee_machine_t *vm, int index, int opt) {
+  cm_object_t *boolean = cm_get(vm, index);
+  if (!boolean) return opt;
+  if (boolean->type != CM_TBOOLEAN) return opt;
+
+  return boolean->boolean;
+}
+VEC2_TYPE cm_optvec2(coffee_machine_t *vm, int index, VEC2_TYPE opt) {
+  cm_object_t *vec2 = cm_get(vm, index);
+  if (!vec2) return opt;
+  if (vec2->type != CM_TBOOLEAN) return opt;
+
+  return vec2->vec2;
+}
+VEC3_TYPE cm_optvec3(coffee_machine_t *vm, int index, VEC3_TYPE opt) {
+  cm_object_t *vec3 = cm_get(vm, index);
+  if (!vec3) return opt;
+  if (vec3->type != CM_TBOOLEAN) return opt;
+
+  return vec3->vec3;
+}
+VEC4_TYPE cm_optvec4(coffee_machine_t *vm, int index, VEC4_TYPE opt) {
+  cm_object_t *vec4 = cm_get(vm, index);
+  if (!vec4) return opt;
+  if (vec4->type != CM_TBOOLEAN) return opt;
+
+  return vec4->vec4;
+}
+cm_object_t* cm_optobject(coffee_machine_t *vm, int index, cm_object_t *opt) {
+  cm_object_t *obj = cm_get(vm, index);
+  if (!obj) return opt;
+  // if (vec2->type != CM_TBOOLEAN) return opt;
+
+  return obj;
+}
+void *cm_optudata(coffee_machine_t *vm, int index, void *opt) {
+  cm_object_t *udata = cm_get(vm, index);
+  if (!udata) return opt;
+  if (udata->type != CM_TUSERDATA) return opt;
+
+  return udata->userdata;
+}
+cm_object_t* cm_optref(coffee_machine_t *vm, int index, cm_object_t *opt) {
+  cm_object_t *ref = cm_get(vm, index);
+  if (!ref) return opt;
+  if (ref->type != CM_TREFERENCE) return opt;
+
+  return ref->ref;
+}
+cm_function* cm_optfunction(coffee_machine_t *vm, int index, cm_function *opt) {
+  cm_object_t *fn = cm_get(vm, index);
+  if (!fn) return opt;
+  if (fn->type != CM_TREFERENCE) return opt;
+
+  return fn->func;
+}
+
+/*====================*
+ *       Coffee       *
+ *====================*/
+
+const char *typenames[] = {
+  "null", "number", "string", "boolean",
+  "vec2", "vec3", "vec4", "array", "table",
+  "userdata"
+};
+
+static const char *typename_from_object(cm_object_t *obj) {
+  if (!obj) return "";
+  if (obj->type < 0 || obj->type >= 10) return "";
+  return typenames[obj->type];
+}
+
+CM_API void cm_object_print(cm_object_t *obj) {
+  if (!obj) return;
+  const char *typename = typename_from_object(obj);
+  const char *prev_typename = typename_from_object(obj->prev);
+  const char *next_typename = typename_from_object(obj->next);
+  const char *parent_typename = typename_from_object(obj->parent);
+  const char *child_typename = typename_from_object(obj->child);
+  CM_LOG("<%s>%p -> prev: <%s>%p, next: <%s>%p, parent: <%s>%p, child: <%s>%p", typename, obj, prev_typename, obj->prev, next_typename, obj->next, parent_typename, obj->parent, child_typename, obj->child);
 }
 
 cm_object_t* cm_object_create(CM_T_ type) {
   cm_object_t *object = malloc(sizeof(*object));
   memset(object, 0, sizeof(*object));
 
+  object->marked = 0;
+  object->name = NULL;
   object->next = NULL;
   object->prev = NULL;
   object->child = NULL;
@@ -221,114 +533,157 @@ cm_object_t *cm_object_load(const char *filename) {
 
   cm_object_t *obj = cm_parse_json(content);
   if (!obj) {
-    free((char*)content);
+    CM_FREE((char*)content);
     return NULL;
   }
 
+  CM_FREE((char*)content);
   // CM_TRACEERR("okay");
 
   return obj;
 }
 
-cm_object_t* cm_vec2_array_from_json(cJSON *const array) {
-  if (!array) return NULL;
-  cm_object_t *object = cm_create_array(NULL);
+cm_object_t* cm_object_clone(cm_object_t *obj) {
+  CM_ASSERT(obj != NULL);
+  cm_object_t *clone = NULL;
 
-
-  cJSON *item = NULL;
-  cJSON_ArrayForEach(item, array) {
-    if (json_is_vec2(item)) {
-      VEC2_TYPE vec = json_to_vec2(item);
-      cm_object_t *v = cm_create_vec2(vec);
-      cm_object_push(object, -1, v);
-    }
-  }
-
-  return object;
-}
-
-cm_object_t* cm_object_from_json(cJSON* json) {
-  if (!json) return NULL;
-  cm_object_t *field = NULL;
-  const char *typename = NULL;
-  // if (meta_field) typename = cm_object_get_string(meta_field, CM_META_TYPE);
-
-  int type = -1;
-  if (typename) type = get_type_from_string(typename);
-
-  if (type == -1) type = get_type_from_cjson_type(json->type, json);
-
-  switch (type) {
+  switch(obj->type) {
+    case CM_TNULL:
+      clone = cm_object_create(CM_TNULL);
+      break;
     case CM_TNUMBER:
-      field = cm_number_from_json(json);
+      clone = cm_create_number(obj->number);
       break;
     case CM_TSTRING:
-      field = cm_string_from_json(json);
+      clone = cm_create_string(obj->string);
       break;
     case CM_TBOOLEAN:
-      field = cm_boolean_from_json(json);
+      clone = cm_create_boolean(obj->boolean);
       break;
     case CM_TVEC2:
-      field = cm_vec2_from_json(json);
+      clone = cm_create_vec2(obj->vec2);
       break;
     case CM_TVEC3:
-      field = cm_vec3_from_json(json);
+      clone = cm_create_vec3(obj->vec3);
       break;
     case CM_TVEC4:
-      field = cm_vec4_from_json(json);
+      clone = cm_create_vec4(obj->vec4);
       break;
     case CM_TARRAY:
-      field = cm_array_from_json(json);
-      break;
-    case CM_TTABLE:
-      field = cm_table_from_json(json);
-      break;
-    case CM_TCUSTOM:
       {
-        field = cm_vm_get_type(typename);
-        // if (type) {
-
-        // }
-        // if (field_type->load) field = field_type->load(json);
-        // // TRACELOG("%p", field);
-        // if (field) field->field_type = field_type;
+        clone = cm_create_array(NULL);
+        cm_object_t *iter = NULL;
+        cm_object_foreach(iter, obj) {
+          cm_object_t *item_clone = cm_object_clone(iter);
+          if (item_clone) cm_object_push(clone, -1, item_clone);
+        }
+        break;
       }
-      break;
+    case CM_TTABLE:
+      {
+        clone = cm_create_table(NULL);
+        cm_object_t *iter = NULL;
+        cm_object_foreach(iter, obj) {
+          cm_object_t *item_clone = cm_object_clone(iter);
+          if (item_clone) cm_object_set(clone, iter->name, item_clone);
+        }
+        break;
+      }
     default:
-      CM_TRACELOG("Unknown type");
+      CM_TRACELOG("Unkown Coffee type: %d", obj->type);
   }
-  // if (field && field->type == CM_TVEC2) CM_TRACEERR("testew %f %f", field->type, field->vec2.data[0], field->vec2.data[1]);
 
-  if (field) field->type = type;
-  return field;
+  if (obj->name) cm_object_set_name(clone, obj->name);
+
+  return clone;
+}
+
+cm_object_t* cm_object_replace(cm_object_t *obj, const char *name, cm_object_t *new_item) {
+  CM_ASSERT(obj != NULL);
+  CM_ASSERT(new_item != NULL);
+  if (!name) return NULL;
+
+  cm_object_t *old = cm_object_get(obj, name);
+  if (!old) return NULL;
+
+  cm_object_t *prev = old->prev;
+  cm_object_t *next = old->next;
+  // cm_object_t *parent = old->parent;
+
+  if (prev) prev->next = new_item;
+  if (next) next->prev = new_item;
+
+  new_item->prev = prev;
+  new_item->next = next;
+  new_item->parent = obj;
+
+  if (obj->child == old) obj->child = new_item;
+  cm_object_set_name(new_item, name);
+
+  return old;
+}
+
+void cm_object_remove(cm_object_t *object, const char *name) {
+  CM_ASSERT(object != NULL);
+  if (!name) return;
+
+  cm_object_t *item = cm_object_get(object, name);
+  if (!item) return;
+
+  cm_object_delete(item);
 }
 
 void cm_object_clear(cm_object_t *object) {
   if (!object) return;
-  if (object->next) cm_object_delete(object->next);
-  if (object->child) cm_object_delete(object->child);
-  if (object->own_meta && object->meta) cm_object_delete(object->meta);
-  // if (object->meta) meta_destroy(object->meta);
+  if (!object->child) return;
+
+  cm_object_t *iter = NULL;
+  cm_object_foreach(iter, object) {
+    cm_object_clear(iter);
+  }
   object->child = NULL;
-  // free(object);
 }
 
 void cm_object_delete(cm_object_t *object) {
   if (!object) return;
-  cm_object_clear(object);
+  // if (object->next) cm_object_delete(object->next)
+  cm_object_t *prev = object->prev;
+  cm_object_t *next = object->next;
+  cm_object_t *parent = object->parent;
+  if (object->child) cm_object_clear(object);
+
+  if (prev) prev->next = object->next;
+  if (next) next->prev = object->prev;
+  if (parent && parent->child == object) parent->child = next;
+
+  // cm_object_clear(object);
   CM_FREE(object);
+}
+
+void cm_object_set_name(cm_object_t *object, const char *name) {
+  CM_ASSERT(object != NULL);
+  if (!name) return;
+
+  int name_len = strlen(name);
+  if (!object->name) object->name = CM_MALLOC(name_len + 5);
+  else object->name= CM_REALLOC(object->name, name_len + 5);
+  
+  strcpy(object->name, name);
+}
+
+const char* cm_object_get_name(cm_object_t *object) {
+  CM_ASSERT(object != NULL);
+  return object->name;
 }
 
 cm_object_t *cm_object_get(cm_object_t *field, const char *name) {
   if (!field || !name) return NULL;
-  // int sz = 32;
-  // if (sz <= 0) return field;
   const char *part = strstr(name, "//");
   // CM_TRACELOG("%s", name);
   if (!part) {
     cm_object_t *item = NULL;
     cm_object_foreach(item, field) {
-      if (!strcmp(item->name, name)) {
+      if (item->name && !strcmp(item->name, name)) {
         return item;
       }
     }
@@ -339,16 +694,11 @@ cm_object_t *cm_object_get(cm_object_t *field, const char *name) {
   char key[sz+1];
   memset(key, 0, sz+1);
 
-  // for (int i = 0; i < sz; i++) {
-  //  CM_TRACELOG("%c", name[i]);
-  // }
-
   memcpy(key, name, sz);
-  // CM_TRACELOG("%s %d", key, sz);
 
   cm_object_t *item = NULL;
   cm_object_foreach(item, field) {
-    if (!strcmp(item->name, key)) return cm_object_get(item, part+2);
+    if (item->name && !strcmp(item->name, key)) return cm_object_get(item, part+2);
   }
 
   return NULL;
@@ -367,26 +717,31 @@ cm_object_t *cm_object_index(cm_object_t *field, int index) {
   return NULL;
 }
 
-cm_object_t *cm_object_set(cm_object_t *field, const char *name, cm_object_t *item) {
-  if (!field || !name || !item) return NULL;
+cm_object_t *cm_object_set(cm_object_t *obj, const char *name, cm_object_t *item) {
+  CM_ASSERT(obj != NULL);
+  if (!name || !item) return NULL;
+
 
   cm_object_t *el = NULL;
-  cm_object_foreach(el, field) {
-    if (!strcmp(el->name, name)) return el;
+  cm_object_foreach(el, obj) {
+    if (el->name && !strcmp(el->name, name)) return el;
   }
 
-  strcpy(item->name, name);
-  if (!field->child) {
-    field->child = item;
-    return field->child;
+  // strcpy(item->name, name);
+  cm_object_set_name(item, name);
+  if (!obj->child) {
+    obj->child = item;
+    item->parent = obj;
+    return obj->child;
   }
 
-  el = field->child;
+
+  el = obj->child;
   while (el->next) el = el->next;
 
   el->next = item;
   item->prev = el;
-  item->parent = field;
+  item->parent = obj;
 
   return item;
 }
@@ -457,6 +812,14 @@ cm_object_t* cm_object_get_meta(cm_object_t *obj) {
 }
 
 /*================*
+ *      NULL      *
+ *================*/
+
+cm_object_t* cm_create_null() {
+  return cm_object_create(CM_TNULL);
+}
+
+/*================*
  *     Number     *
  *================*/
 
@@ -467,14 +830,6 @@ cm_object_t* cm_create_number(float number) {
   cm_object_set_number(field, number);
 
   return field;
-}
-
-cm_object_t *cm_number_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (json->type != cJSON_Number) return NULL;
-
-  float number = json_to_number(json);
-  return cm_create_number(number);
 }
 
 void cm_object_set_number(cm_object_t *field, float number) {
@@ -532,20 +887,17 @@ cm_object_t* cm_create_string(const char *string) {
   return field;
 }
 
-cm_object_t *cm_string_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (json->type != cJSON_String) return NULL;
+void cm_object_set_string(cm_object_t *obj, const char *string) {
+  if (!obj) return;
+  if (!string) return;
+  if (obj->type != CM_TSTRING) return;
+  int len = strlen(string);
 
-  const char *string = json_to_string(json);
-  return cm_create_string(string);
-}
+  if (obj->string && strlen(obj->string) > len) obj->string = CM_REALLOC(obj->string, len+10);
+  else if (!obj->string) obj->string = CM_MALLOC(len+10);
 
-void cm_object_set_string(cm_object_t *field, const char *string) {
-  if (!field) return;
-  if (field->type != CM_TSTRING) return;
-
-  // field->string = string;
-  strcpy(field->string, string);
+  // obj->string = string;
+  strcpy(obj->string, string);
 }
 
 
@@ -596,14 +948,6 @@ cm_object_t* cm_create_boolean(int boolean) {
   cm_object_set_boolean(field, boolean);
 
   return field;
-}
-
-cm_object_t *cm_boolean_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (!cJSON_IsBool(json)) return NULL;
-
-  int boolean = json_to_boolean(json);
-  return cm_create_boolean(boolean);
 }
 
 void cm_object_set_boolean(cm_object_t *obj, int boolean) {
@@ -661,17 +1005,6 @@ cm_object_t* cm_create_vec2(VEC2_TYPE vec) {
   return field;
 }
 
-cm_object_t *cm_vec2_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (json->type != cJSON_Array) return NULL;
-
-  VEC2_TYPE vec = json_to_vec2(json);
-  // cJSON *item = json->child;
-  // CM_TRACELOG("%s %f %f", json->string, vec.data[0], vec.data[1]);
-
-  return cm_create_vec2(vec);
-}
-
 void cm_object_set_vec2(cm_object_t *field, VEC2_TYPE vec) {
   if (!field) return;
   if (field->type != CM_TVEC2) return;
@@ -725,14 +1058,6 @@ cm_object_t* cm_create_vec3(VEC3_TYPE vec) {
   cm_object_set_vec3(field, vec);
 
   return field;
-}
-
-cm_object_t *cm_vec3_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (json->type != cJSON_Array) return NULL;
-
-  VEC3_TYPE vec = json_to_vec3(json);
-  return cm_create_vec3(vec);
 }
 
 void cm_object_set_vec3(cm_object_t *field, VEC3_TYPE vec) {
@@ -790,14 +1115,6 @@ cm_object_t* cm_create_vec4(VEC4_TYPE vec) {
   return field;
 }
 
-cm_object_t *cm_vec4_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (json->type != cJSON_Array) return NULL;
-
-  VEC4_TYPE vec = json_to_vec4(json);
-  return cm_create_vec4(vec);
-}
-
 void cm_object_set_vec4(cm_object_t *field, VEC4_TYPE vec) {
   if (!field) return;
   if (field->type != CM_TVEC4) return;
@@ -853,23 +1170,6 @@ cm_object_t* cm_create_array(cm_object_t *ref) {
   return field;
 }
 
-cm_object_t *cm_array_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (json->type != cJSON_Array) return NULL;
-
-  cm_object_t *field = cm_create_array(NULL);
-
-
-  cJSON *item = NULL;
-  cJSON_ArrayForEach(item, json) {
-    cm_object_t *aux = cm_object_from_json(item);
-
-    if (aux) cm_object_push(field, -1, aux);
-  }
-
-  return field;
-}
-
 cm_object_t *cm_object_to_array(cm_object_t *field) {
   CM_ASSERT(field != NULL);
   CM_ASSERT(field->type != CM_TARRAY);
@@ -917,35 +1217,6 @@ cm_object_t* cm_create_table(cm_object_t *ref) {
   return field;
 }
 
-cm_object_t *cm_table_from_json(cJSON *const json) {
-  if (!json) return NULL;
-  if (json->type != cJSON_Object) return NULL;
-
-  cm_object_t *object = cm_create_table(NULL);
-  cm_object_t *meta = NULL;
-
-  cJSON *json_meta = cJSON_GetObjectItem(json, CM_META_NAME);
-  if (json_meta) {
-    meta = cm_object_from_json(json_meta);
-    cm_object_set_meta(object, meta);
-  }
-
-  cJSON *item = NULL;
-  cJSON_ArrayForEach(item, json) {
-    if (!strcmp(item->string, CM_META_NAME)) continue;
-    if (!strcmp(item->string, CM_HEADER_NAME)) continue;
-
-    cm_object_t *meta_field = NULL;
-
-    if (meta) meta_field = cm_object_get(meta, item->string);
-    cm_object_t *aux = cm_object_from_json(item);
-
-    if (aux) cm_object_set(object, item->string, aux);
-  }
-
-  return object;
-}
-
 void cm_object_set_table(cm_object_t *field, cm_object_t *object) {}
 
 cm_object_t *cm_object_to_object(cm_object_t *field) {
@@ -973,11 +1244,11 @@ cm_object_t* cm_object_get_opt_table(cm_object_t *field, const char *name, cm_ob
   return cm_object_to_opt_table(item, opt);
 }
 
-cm_object_t* cm_object_add_table(cm_object_t *field, const char *name, cm_object_t *object) {
-  if (!field) return NULL;
+cm_object_t* cm_object_add_table(cm_object_t *obj, const char *name, cm_object_t *object) {
+  if (!obj) return NULL;
 
   if (!object) object = cm_create_table(NULL);
-  return cm_object_set(field, name, object);
+  return cm_object_set(obj, name, object);
 }
 
 /*=================
@@ -985,52 +1256,149 @@ cm_object_t* cm_object_add_table(cm_object_t *field, const char *name, cm_object
  *=================*/
 
 cm_object_t* cm_create_userdata(void *userdata) {
-  cm_object_t *field = cm_object_create(CM_TUSERDATA);
-  if (!field) return NULL;
+  cm_object_t *obj = cm_object_create(CM_TUSERDATA);
+  if (!obj) return NULL;
 
-  field->userdata = userdata;
+  obj->userdata = userdata;
 
-  return field;
+  return obj;
 }
 
-cm_object_t *cm_userdata_from_json(cJSON *const json) {
-  return NULL;
+void cm_object_set_userdata(cm_object_t *obj, void *userdata) {
+  CM_ASSERT(obj != NULL);
+  if (!userdata) return;
+  if (obj->type == CM_TTABLE || obj->type == CM_TARRAY) return;
+
+  if (obj->type == CM_TSTRING) CM_FREE(obj->string);
+  obj->type = CM_TUSERDATA;
+  obj->userdata = userdata;
 }
 
-void cm_object_set_userdata(cm_object_t *field, void *userdata) {}
-
-void *cm_object_to_userdata(cm_object_t *field) {
-  CM_ASSERT(field != NULL);
-  CM_ASSERT(field->type != CM_TUSERDATA);
-
-  return cm_object_to_opt_userdata(field, NULL);
+void *cm_object_to_userdata(cm_object_t *obj) {
+  CM_ASSERT(obj != NULL);
+  return cm_object_to_opt_userdata(obj, NULL);
 }
 
-void *cm_object_to_opt_userdata(cm_object_t *field, void *opt) {
-  if (!field) return opt;
-  if (field->type != CM_TUSERDATA) return opt;
+void *cm_object_to_opt_userdata(cm_object_t *obj, void *opt) {
+  if (!obj) return opt;
+  if (obj->type != CM_TUSERDATA) return opt;
 
-  return field;
+  return obj->userdata;
 }
 
-void* cm_object_get_userdata(cm_object_t *field, const char *name) {
-  CM_ASSERT(field != NULL);
-  return cm_object_get_opt_userdata(field, name, NULL);
+void* cm_object_get_userdata(cm_object_t *obj, const char *name) {
+  CM_ASSERT(obj != NULL);
+  return cm_object_get_opt_userdata(obj, name, NULL);
 }
 
-void* cm_object_get_opt_userdata(cm_object_t *field, const char *name, void* opt) {
-  if (!field) return opt;
-  cm_object_t *item = cm_object_get(field, name);
+void* cm_object_get_opt_userdata(cm_object_t *obj, const char *name, void* opt) {
+  if (!obj) return opt;
+  cm_object_t *item = cm_object_get(obj, name);
   return cm_object_to_opt_userdata(item, opt);
 }
 
-cm_object_t* cm_object_add_userdata(cm_object_t *field, const char *name, void *userdata) {
-  if (!field) return NULL;
+cm_object_t* cm_object_add_userdata(cm_object_t *obj, const char *name, void *userdata) {
+  if (!obj) return NULL;
 
   cm_object_t *userdataf = cm_create_userdata(userdata);
 
-  return cm_object_set(field, name, userdataf);
+  return cm_object_set(obj, name, userdataf);
 }
+
+/*=================
+ *    Function
+ *=================*/
+
+cm_object_t* cm_create_function(cm_function* function) {
+  cm_object_t *field = cm_object_create(CM_TFUNCTION);
+  if (!field) return NULL;
+
+  field->func = function;
+
+  return field;
+}
+
+cm_function* cm_object_to_opt_function(cm_object_t *obj, cm_function* opt) {
+  if (!obj) return opt;
+  if (obj->type != CM_TFUNCTION) return opt;
+
+  return obj->func;
+}
+
+cm_function* cm_object_get_function(cm_object_t *field, const char *name) {
+  CM_ASSERT(field != NULL);
+  return cm_object_get_opt_function(field, name, NULL);
+}
+
+cm_function* cm_object_get_opt_function(cm_object_t *obj, const char *name, cm_function* opt) {
+  if (!obj) return opt;
+  cm_object_t *item = cm_object_get(obj, name);
+  return cm_object_to_opt_function(item, opt);
+}
+
+cm_object_t* cm_object_add_function(cm_object_t *obj, const char *name, cm_function* func) {
+  if (!obj) return NULL;
+
+  cm_object_t *funcf = cm_create_function(func);
+
+  return cm_object_set(obj, name, funcf);
+}
+
+/*=================*
+ *    Reference    *
+ *=================*/
+
+cm_object_t* cm_create_reference(cm_object_t *ref) {
+  cm_object_t *obj = cm_object_create(CM_TREFERENCE);
+  if (!obj) return NULL;
+
+  cm_object_set_reference(obj, ref);
+
+  return obj;
+}
+
+void cm_object_set_reference(cm_object_t *obj, cm_object_t *object) {
+  if (!obj) return;
+  if (!object) return;
+  if (obj->type != CM_TREFERENCE) return;
+
+  obj->ref = object;
+}
+
+cm_object_t *cm_object_to_reference(cm_object_t *obj) {
+  CM_ASSERT(obj != NULL);
+  CM_ASSERT(obj->type != CM_TREFERENCE);
+
+  return cm_object_to_opt_reference(obj, NULL);
+}
+
+cm_object_t *cm_object_to_opt_reference(cm_object_t *obj, cm_object_t *opt) {
+  if (!obj) return opt;
+  if (obj->type != CM_TREFERENCE) return opt;
+
+  return obj->ref;
+}
+
+cm_object_t* cm_object_get_reference(cm_object_t *obj, const char *name) {
+  CM_ASSERT(obj != NULL);
+  return cm_object_get_opt_reference(obj, name, NULL);
+}
+
+cm_object_t* cm_object_get_opt_reference(cm_object_t *obj, const char *name, cm_object_t* opt) {
+  if (!obj) return opt;
+  cm_object_t *item = cm_object_get(obj, name);
+  return cm_object_to_opt_reference(item, opt);
+}
+
+cm_object_t* cm_object_add_reference(cm_object_t *obj, const char *name, cm_object_t *object) {
+  if (!obj) return NULL;
+  if (!object) return NULL;
+
+  // if (!object) object = cm_create_reference(object);
+  cm_object_t *ref = cm_create_reference(object);
+  return cm_object_set(obj, name, ref);
+}
+
 
 /*================*
  *      JSON      *
@@ -1090,6 +1458,7 @@ static char *check_content(const char *json_str, int *len) {
 
 static int char_is_number(char p) {
   // CM_TRACELOG("%c", p);
+  if (p == '-') return 1;
   int n = p - 48;
 
   return (n >= 0 && n <= 9);
@@ -1254,7 +1623,7 @@ static cm_object_t *parse_json_number(const char **json_str) {
 
   // o_num =
   // CM_TRACELOG("%f", o_num->number);
-  *json_str += len+1;
+  *json_str += len;
 
   return o_num;
 }
@@ -1266,15 +1635,15 @@ static cm_object_t *parse_json_string(const char **json_str) {
 
   char *str = check_string(init, &len);
   if (!str || len < 0) return NULL;
+  char strp[len+1];
+  memcpy(strp, str, len);
+  strp[len] = '\0';
+
+  // const char *strp = len > 0 ? str : "";
+  cm_object_t *o_str = cm_create_string(strp);
 
 
-  const char *strp = len > 0 ? str : "";
-  cm_object_t *o_str = cm_object_create(CM_TSTRING);
-  memcpy(o_str->string, strp, len);
-  // CM_TRACELOG("%s", str);
-
-
-  *json_str = str+len+2;
+  *json_str = str+len+1;
 
   return o_str;
 }
@@ -1289,13 +1658,17 @@ cm_object_t *parse_json_array(const char **json_str) {
   cm_object_t *obj = NULL;
 
   char *p = init;
+  p = ignore_chars(p);
   if (*p == '[') {
     p++;
-
+    // CM_TRACELOG("%s", p);
     obj = cm_object_create(CM_TARRAY);
     while (*p != ']') {
       p = ignore_chars(p);
-      if (*p == ',') p++;
+      if (*p == ',') {
+        p++;
+        p = ignore_chars(p);
+      }
 
       // CM_TRACELOG("%s", p);
 
@@ -1303,6 +1676,7 @@ cm_object_t *parse_json_array(const char **json_str) {
       // CM_TRACELOG("%s", p);
       if (*p == '{') {
         child = parse_json_object(&p);
+        // CM_TRACELOG("%p %s", child, p);
       } else if (*p == '"') {
         child = parse_json_string(&p);
       } else if (*p == '[') {
@@ -1315,12 +1689,16 @@ cm_object_t *parse_json_array(const char **json_str) {
         child = parse_json_null(&p);
       }
       // CM_
-      p = ignore_chars(p);
 
       // CM_TRACELOG("%p %s", child, p);
-      CM_ASSERT(child != NULL);
+      if (!child) {
+        CM_TRACEERR("Failed to parse: %s", p);
+        exit(1);
+      }
+      p = ignore_chars(p);
       // cm_object_set(obj, key, child);
       cm_object_push(obj, -1, child);
+      // CM_TRACELOG("%s", p);
     }
     p++;
     *json_str = p;
@@ -1335,13 +1713,17 @@ cm_object_t *parse_json_object(const char **json_str) {
   cm_object_t *obj = NULL;
 
   char *p = init;
+  p = ignore_chars(p);
   if (*p == '{') {
     p++;
     obj = cm_object_create(CM_TTABLE);
     // p = (char*)
     while (*p != '}') {
       p = (char*)ignore_chars(p);
-      if (*p == ',') p++;
+      if (*p == ',') {
+        p++;
+        p = ignore_chars(p);
+      }
 
       int len = 0;
       // CM_TRACELOG("%s", p);
@@ -1363,10 +1745,10 @@ cm_object_t *parse_json_object(const char **json_str) {
       p = (char*)ignore_chars(p);
 
       cm_object_t *child = NULL;
-        // CM_TRACELOG("%s", p);
       if (*p == '{') {
         child = parse_json_object(&p);
       } else if (*p == '"') {
+        // CM_TRACELOG("%s", p);
         child = parse_json_string(&p);
       } else if (*p == '[') {
         child = parse_json_array(&p);
@@ -1378,16 +1760,18 @@ cm_object_t *parse_json_object(const char **json_str) {
         child = parse_json_null(&p);
       }
 
-      // CM_TRACELOG("%p %s", child, p);
-      CM_ASSERT(child != NULL);
-      // CM_TRACELOG("addzando %s", p);
+      if (!child) {
+        CM_TRACEERR("Failed to parse: %s", p);
+        exit(1);
+      }
+      // CM_TRACEERR("%s %d %s", key, child->type, p);
       cm_object_set(obj, key, child);
-
       p = ignore_chars(p);
 
       // if (title)
     }
     p++;
+    // p = ignore_chars(p);
     *json_str = p;
   }
 
@@ -1397,6 +1781,7 @@ cm_object_t *parse_json_object(const char **json_str) {
 cm_object_t* cm_parse_json(const char *json_string) {
   CM_ASSERT(json_string != NULL);
 
+      // CM_TRACELOG("%s", json_string);
   const char *str = json_string;
   cm_object_t *root = parse_json_object(&json_string);
 
@@ -1441,6 +1826,40 @@ const char* print_json_number(cm_object_t *obj, int *char_count) {
   return str;
 }
 
+const char *print_json_vec2(cm_object_t *obj, int *char_count) {
+  CM_ASSERT(obj != NULL);
+  if (obj->type != CM_TVEC2) return NULL;
+  char lstr_n[128];
+  memset(lstr_n, 0, 128);
+  // sprintf(lstr_n, "%f", obj->number);
+  VEC2_TYPE *vec = &obj->vec2;
+
+  int sz = 0;
+  // strlen(const char *__s)
+  // lstr
+  *lstr_n = '(';
+  for (int i = 0; i < 2; i++) {
+    sprintf(lstr_n, "%s%f", lstr_n, vec->data[i]);
+    if (i < 1) strcat(lstr_n, ", ");
+  }
+  strcat(lstr_n, ")");
+  sz = strlen(lstr_n);
+
+
+  char *str = CM_CALLOC(1, sz+1);
+  // *str = '(';
+
+  // for (int i = 0; i < 2; i++) {
+  //   sprintf(lstr_n, "%f", vec->data[i]);
+  // }
+
+  if (char_count) *char_count += sz;
+  strcpy(str, lstr_n);
+  // strcat(str, ")");
+
+  return str;
+}
+
 const char* print_json_string(cm_object_t *obj, int *char_count) {
   if (obj->type != CM_TSTRING) return NULL;
   int len = strlen(obj->string);
@@ -1458,48 +1877,72 @@ const char *print_json_object(cm_object_t *obj, int *char_count);
 
 const char* print_json_array(cm_object_t *obj, int *char_count) {
   if (obj->type != CM_TARRAY) return NULL;
+  // int str_len = 3;
+  // char *str = CM_CALLOC(1, str_len);
+  // *str = '[';
+
+  // cm_object_t *el = NULL;
+  // cm_object_foreach(el, obj) {
+  //   const char *el_str = NULL;
+  //   int el_str_len = 0;
+  //   switch (el->type) {
+  //     case CM_TNULL:
+  //       el_str = print_json_null(el, &el_str_len);
+  //       break;
+  //     case CM_TBOOLEAN:
+  //       el_str = print_json_boolean(el, &el_str_len);
+  //       break;
+  //     case CM_TNUMBER:
+  //       el_str = print_json_number(el, &el_str_len);
+  //       break;
+  //     case CM_TSTRING:
+  //       el_str = print_json_string(el, &el_str_len);
+  //       break;
+  //     case CM_TARRAY:
+  //       el_str = print_json_array(el, &el_str_len);
+  //       break;
+  //     case CM_TTABLE:
+  //       el_str = print_json_object(el, &el_str_len);
+  //       break;
+  //     default:
+  //       CM_TRACELOG("Invalid json type: %d", el->type);
+  //   }
+  //   if (el_str && el_str_len > 0) {
+
+  //     str_len += el_str_len + 2;
+  //     str = realloc(str, str_len);
+  //     strcat(str, el_str);
+  //     if (el->next) strcat(str, ",");
+  //     CM_FREE((char*)el_str);
+  //   }
+  // }
+  // strcat(str, "]");
+
+  // if (char_count) *char_count += str_len;
+
+  // return str;
+
   int str_len = 3;
   char *str = CM_CALLOC(1, str_len);
   *str = '[';
 
-  cm_object_t *el = NULL;
-  cm_object_foreach(el, obj) {
-    const char *el_str = NULL;
-    int el_str_len = 0;
-    switch (el->type) {
-      case CM_TNULL:
-        el_str = print_json_null(el, &el_str_len);
-        break;
-      case CM_TBOOLEAN:
-        el_str = print_json_boolean(el, &el_str_len);
-        break;
-      case CM_TNUMBER:
-        el_str = print_json_number(el, &el_str_len);
-        break;
-      case CM_TSTRING:
-        el_str = print_json_string(el, &el_str_len);
-        break;
-      case CM_TARRAY:
-        el_str = print_json_array(el, &el_str_len);
-        break;
-      case CM_TTABLE:
-        el_str = print_json_object(el, &el_str_len);
-        break;
-      default:
-        CM_TRACELOG("Invalid json type: %d", el->type);
-    }
-    if (el_str && el_str_len > 0) {
-
-      str_len += el_str_len + 2;
+  cm_object_t *iter = NULL;
+  cm_object_foreach(iter, obj) {
+    int iter_str_len = 0;
+    const char *iter_str = cm_print_json(iter, &iter_str_len);
+    if (iter_str) {
+      str_len += iter_str_len + 2;
       str = realloc(str, str_len);
-      strcat(str, el_str);
-      if (el->next) strcat(str, ",");
-      CM_FREE((char*)el_str);
+      strcat(str, iter_str);
+      if (iter->next) strcat(str, ",");
+      CM_FREE((char*)iter_str);
     }
   }
+
   strcat(str, "]");
 
   if (char_count) *char_count += str_len;
+  // CM_TRACELOG("%s %d", obj->name, str_len);
 
   return str;
 }
@@ -1510,540 +1953,144 @@ const char* print_json_object(cm_object_t *obj, int *char_count) {
   char *str = CM_CALLOC(1, str_len);
   *str = '{';
 
-  cm_object_t *el = NULL;
-  cm_object_foreach(el, obj) {
-    const char *el_str = NULL;
-    int el_str_len = 0;
-    switch (el->type) {
-      case CM_TNULL:
-        el_str = print_json_null(el, &el_str_len);
-        break;
-      case CM_TBOOLEAN:
-        el_str = print_json_boolean(el, &el_str_len);
-        break;
-      case CM_TNUMBER:
-        el_str = print_json_number(el, &el_str_len);
-        break;
-      case CM_TSTRING:
-        el_str = print_json_string(el, &el_str_len);
-        break;
-      case CM_TARRAY:
-        el_str = print_json_array(el, &el_str_len);
-        break;
-      case CM_TTABLE:
-        el_str = print_json_object(el, &el_str_len);
-        break;
-      default:
-        CM_TRACELOG("Invalid json type: %d", el->type);
-    }
-
-    if (el_str && el_str_len > 0) {
-      int key_size = strlen(el->name) + 3;
+  cm_object_t *iter = NULL;
+  cm_object_foreach(iter, obj) {
+    int iter_str_len = 0;
+    const char *iter_str = cm_print_json(iter, &iter_str_len);
+    if (iter_str) {
+      int key_size = strlen(iter->name) + 3;
       char key[key_size+2];
-      sprintf(key, "\"%s\": ", el->name);
+      sprintf(key, "\"%s\": ", iter->name);
 
       // CM_
 
-      str_len += key_size + el_str_len + 2;
+      str_len += key_size + iter_str_len + 2;
       str = realloc(str, str_len);
-      
+
       strcat(str, key);
-      strcat(str, el_str);
-      if (el->next) strcat(str, ",");
-      // CM_TRACELOG("%s %s %s", el->name, str, el_str);
-      CM_FREE((char*)el_str);
+      strcat(str, iter_str);
+      if (iter->next) strcat(str, ",");
+  //     // CM_TRACELOG("%s %s %s", el->name, str, el_str);
+      CM_FREE((char*)iter_str);
     }
   }
+
   strcat(str, "}");
 
   if (char_count) *char_count += str_len;
   // CM_TRACELOG("%s %d", obj->name, str_len);
 
   return str;
+
+  //   const char *el_str = NULL;
+  //   int el_str_len = 0;
+  //   switch (el->type) {
+  //     case CM_TNULL:
+  //       el_str = print_json_null(el, &el_str_len);
+  //       break;
+  //     case CM_TBOOLEAN:
+  //       el_str = print_json_boolean(el, &el_str_len);
+  //       break;
+  //     case CM_TNUMBER:
+  //       el_str = print_json_number(el, &el_str_len);
+  //       break;
+  //     case CM_TSTRING:
+  //       el_str = print_json_string(el, &el_str_len);
+  //       break;
+  //     case CM_TARRAY:
+  //       el_str = print_json_array(el, &el_str_len);
+  //       break;
+  //     case CM_TTABLE:
+  //       el_str = print_json_object(el, &el_str_len);
+  //       break;
+  //     default:
+  //       CM_TRACELOG("Invalid json type: %d", el->type);
+  //   }
+
+  //   if (el_str && el_str_len > 0) {
+  //     int key_size = strlen(el->name) + 3;
+  //     char key[key_size+2];
+  //     sprintf(key, "\"%s\": ", el->name);
+
+  //     // CM_
+
+  //     str_len += key_size + el_str_len + 2;
+  //     str = realloc(str, str_len);
+
+  //     strcat(str, key);
+  //     strcat(str, el_str);
+  //     if (el->next) strcat(str, ",");
+  //     // CM_TRACELOG("%s %s %s", el->name, str, el_str);
+  //     CM_FREE((char*)el_str);
+  //   }
+  // }
+  
 }
 
-const char* cm_print_json(cm_object_t *object) {
-  if (!object) return "{}";
+const char* cm_print_json(cm_object_t *object, int *char_count) {
+  // if (!object) return "{}";
 
-  const char *str = print_json_object(object, NULL);
-  // CM_TRACELOG("%s", str);
+  // // const char *str = print_json_object(object, NULL);
+  // // CM_TRACELOG("%s", str);
+  // return str;
+
+  // int char_count = 0;
+  int str_len = 0;
+  const char *str = NULL;
+  // int count = char_count ? *char_count : 0;
+  // char *str = calloc(1, sizeof(char)*2);
+  // *str = '{';
+
+  cm_object_t *item = object;
+  switch (object->type) {
+    case CM_TNULL:
+      str = print_json_null(item, char_count);
+      break;
+    case CM_TBOOLEAN:
+      str = print_json_boolean(item, char_count);
+      break;
+    case CM_TNUMBER:
+      str = print_json_number(item, char_count);
+      break;
+    case CM_TSTRING:
+      str = print_json_string(item, char_count);
+      break;
+    case CM_TVEC2:
+      str = print_json_vec2(item, char_count);
+    case CM_TARRAY:
+      str = print_json_array(item, char_count);
+      break;
+    case CM_TTABLE:
+      str = print_json_object(item, char_count);
+      break;
+    default:
+      CM_TRACELOG("Invalid json type: %d", item->type);
+  }
+
   return str;
 }
 
+cm_object_t *cm_json_to_coffee(cm_object_t *obj) {
+  CM_ASSERT(obj != NULL);
+  cm_object_t *out = obj;
 
-int json_is_valid(const char *filename) {
-  CM_ASSERT(vm->read_file != NULL);
-  const char *content = vm->read_file(filename, "rb");
+  // if ()
 
-  cJSON *parsed = cJSON_Parse(content);
-  free((char*)content);
-  if (!parsed) return 0;
+  cm_object_t *iter = NULL;
+  cm_object_foreach(iter, out) {
+    if (iter->type == CM_TARRAY) {
+      int len = cm_object_length(iter);
+      // cm_object_t *vec = NULL;
+      if (len == 2) cm_array_to_vec2(iter);
+      else if (len == 3) cm_array_to_vec3(iter);
+      else if (len == 4) cm_array_to_vec4(iter);
 
-  return 1;
-}
-
-cJSON *json_open(const char *filename) {
-  CM_ASSERT(vm->read_file != NULL);
-  const char *content = vm->read_file(filename, "rb");
-  cm_parse_json(content);
-  cJSON *parsed = cJSON_Parse((const char*)content);
-  free((char*)content);
-  if (!parsed) {
-    const char *err = cJSON_GetErrorPtr();
-    if (err != NULL) {
-      CM_TRACEERR("Failed to load json '%s': error before %s", filename, err);
+    } else if (iter->type == CM_TTABLE) {
+      iter = cm_json_to_coffee(iter);
     }
   }
-  return parsed;
-}
-cJSON *json_parse(const char *jsonStr) {
-  cJSON *parsed = cJSON_Parse(jsonStr);
-  if (!parsed) {
-    const char *err = cJSON_GetErrorPtr();
-    if (err != NULL) {
-      CM_TRACEERR("Failed to parse json: error before %s", err);
-    }
-  }
-  return parsed;
-}
 
-cJSON* json_clone(cJSON *src) {
-  CM_ASSERT(src != NULL);
-  const char *json_str = json_print(src);
-  if (!json_str) return NULL;
-
-  return json_parse(json_str);
-}
-
-void json_save(const char *filename, cJSON* const json) {
-  char *string = cJSON_Print(json);
-  size_t size = strlen(string);
-  if (!string) {
-    CM_TRACEERR("Failed to save json: '%s'", filename);
-    return;
-  }
-  vm->write_file(filename, string, size, "wb");
-}
-
-char *json_print(cJSON* const json) {
-  return cJSON_Print(json);
-}
-
-cJSON* json_create() {
-  return cJSON_CreateObject();
-}
-
-// cJSON* json_create_array(const cJSON*) {
-//   return cJSON_CreateArray();
-// }
-
-void json_delete(cJSON* json) {
-  cJSON_Delete(json);
-}
-
-int json_add_item(cJSON *const json, const char *name, cJSON *const item) {
-  CM_ASSERT(json != NULL);
-  // cJSON *string = cJSON_CreateString(value);
-  if (json_is_object(json)) {
-    CM_ASSERT(name != NULL);
-    CM_ASSERT(item != NULL);
-    cJSON_AddItemToObject(json, name, item);
-    return 1;
-  }
-  if (json_is_array(json)) {
-    CM_ASSERT(item != NULL);
-    cJSON_AddItemToArray(json, item);
-    return 1;
-  }
-
-  return 0;
-}
-
-cJSON* json_get_item(cJSON *const json, const char *name, int index) {
-  CM_ASSERT(json != NULL);
-
-  if (json_is_object(json)) {
-    CM_ASSERT(name != NULL);
-    cJSON *item = cJSON_GetObjectItem(json, name);
-    return item;
-  }
-
-  if (json_is_array(json)) {
-    CM_ASSERT(index >= 0);
-    cJSON *item = cJSON_GetArrayItem(json, index);
-    return item;
-  }
-
-  return NULL;
-}
-
-/***********
- * String
- ***********/
-
-cJSON *json_create_string(const char *string) {
-  CM_ASSERT(string != NULL);
-  return cJSON_CreateString(string);
-}
-
-int json_is_string(cJSON* const json) {
-  // cJSON *jsonName = cJSON_GetObjectItem(json, name);
-  CM_ASSERT(json != NULL);
-  return cJSON_IsString(json);
-}
-
-void json_set_string(cJSON* const json, const char* value) {
-  if (!json_is_string(json)) return;
-
-  cJSON_SetValuestring(json, value);
-}
-
-const char* json_to_string(cJSON* const json) {
-  return json_opt_string(json, NULL);
-}
-
-const char* json_opt_string(cJSON* const json, const char* opt) {
-  if (!json_is_string(json)) return opt;
-  return json->valuestring;
-}
-
-cJSON *json_add_string(cJSON* const json, const char *name, const char* value) {
-  cJSON *string = cJSON_CreateString(value);
-  if (json_add_item(json, name, string)) return string;
-
-  return NULL;
-}
-
-const char *json_get_string(cJSON* const json, const char *name, int index) {
-  return json_get_opt_string(json, name, index, NULL);
-}
-
-const char *json_get_opt_string(cJSON* const json, const char *name, int index, const char *opt_string) {
-  // if (!json_is_object(json)) return opt_string;
-  // cJSON *jsonName = cJSON_GetObjectItem(json, name);
-  // return json_opt_string(jsonName, opt_string);
-  cJSON *item = json_get_item(json, name, index);
-  if (!item) return opt_string;
-  return json_opt_string(item, opt_string);
-}
-
-
-/**********
- * Number
- **********/
-
-cJSON* json_create_number(float number) {
-  return cJSON_CreateNumber(number);
-}
-
-int json_is_number(cJSON* const json) {
-  // cJSON *value = cJSON_GetObjectItem(json, name);
-  // if (value) return cJSON_IsNumber(value);
-  // return tc_false;
-  CM_ASSERT(json != NULL);
-  return cJSON_IsNumber(json);
-}
-
-void json_set_number(cJSON* const json, float value) {
-  if (!json_is_number(json)) return;
-  cJSON_SetNumberValue(json, value);
-}
-
-float json_to_number(cJSON *const json) {
-  return json_opt_number(json, -1);
-}
-
-float json_opt_number(cJSON *const json, float opt) {
-  if (!json_is_number(json)) return opt;
-  // CM_TRACELOG("qqqqqq %f", json->valuedouble);
-
-  return json->valuedouble;
-}
-
-cJSON *json_add_number(cJSON *const json, const char *name, float number) {
-  cJSON *value = cJSON_CreateNumber(number);
-  if (json_add_item(json, name, value)) return value;
-
-  return NULL;
-}
-
-float json_get_number(cJSON* const json, const char *name, int index) {
-  return json_get_opt_number(json, name, index, -1);
-}
-float json_get_opt_number(cJSON* const json, const char *name, int index, float optVal) {
-  cJSON *item = json_get_item(json, name, index);
-  if (!item) return optVal;
-  return json_opt_number(item, optVal);
-}
-
-/************
- * Vectors
- ************/
-
-static cJSON *json_create_vecn(float *data, int n) {
-  CM_ASSERT(data != NULL);
-  CM_ASSERT(n > 0);
-  cJSON *array = json_create_array(NULL);
-  for (int i = 0; i < n; i++) {
-    cJSON *item = json_create_number(data[i]);
-    cJSON_AddItemToArray(array, item);
-  }
-
-  return array;
-}
-
-static int json_is_vecn(cJSON *const json, int n) {
-  CM_ASSERT(json != NULL);
-  CM_ASSERT(n > 0);
-  if (!json_is_array(json)) return 0;
-  if (cJSON_GetArraySize(json) < n) return 0;
-  // CM_TRACELOG("testandow");
-
-  return 1;
-}
-
-// static void json_set_vecn(cJSON *const json, float *data, int n) {
-//   CM_ASSERT(json != NULL);
-//   if (!json_is_vecn(json, n)) return;
-//   // CM_ASSERT(json != NULL);
-//   CM_ASSERT(data != NULL);
-
-//   for (int i = 0; i < n; i++) {
-//     // cJSON *item = json_get_item(json, NULL, i);
-//     cJSON *item = cJSON_GetArrayItem(json, i);
-//     if (!item) return;
-//     // TRACELOG("%d: %d", i, data[i]);
-//     // item->valuedouble = data[i];
-//     json_set_number(item, data[i]);
-//   }
-// }
-
-// static float* json_opt_vecn(cJSON *const json, int n, float *opt) {
-
-// }
-
-// TRACELOG("%d: %f %f", i, vec.data[i], item->valuedouble);
-
-#define JSON_VECN(n) \
-cJSON *json_create_vec##n (VEC##n##_TYPE vec) { \
-  return json_create_vecn(vec.data, n); \
-} \
-int json_is_vec##n (cJSON *const json) { \
-  return json_is_vecn(json, n); \
-} \
-void json_set_vec##n (cJSON *const json, VEC##n##_TYPE vec) { \
-  CM_ASSERT(json != NULL); \
-  if (!json_is_vec##n(json)) return; \
-  for (int i = 0; i < n; i++) { \
-    cJSON *item = json_get_item(json, NULL, i); \
-    if (!item) return; \
-    json_set_number(item, vec.data[i]); \
-  } \
-} \
-VEC##n##_TYPE json_to_vec##n (cJSON *const json) { \
-  CM_ASSERT(json != NULL); \
-  VEC##n##_TYPE opt = {-1}; \
-  return json_opt_vec##n (json, opt); \
-} \
-VEC##n##_TYPE json_opt_vec##n (cJSON *const json, VEC##n##_TYPE opt) { \
-  if (!json) return opt; \
-  if (!json_is_vecn(json, n)) return opt; \
-  for (int i = 0; i < n; i++) { \
-    opt.data[i] = json_get_number(json, NULL, i); \
-  } \
-  return opt; \
-} \
-cJSON *json_add_vec##n (cJSON *const json, const char *name, VEC##n##_TYPE vec) { \
-  cJSON *value = json_get_item(json, name, 0); \
-  if (value) { \
-    json_set_vec##n(value, vec); \
-    return value; \
-  } \
-  value = json_create_vec##n(vec); \
-  if (json_add_item(json, name, value)) return value; \
-  json_delete(value); \
-  return NULL; \
-} \
-VEC##n##_TYPE json_get_vec##n (cJSON *const json, const char *name, int index) { \
-  VEC##n##_TYPE opt; \
-  memset(&opt, -1, sizeof(VEC##n##_TYPE)); \
-  return json_get_opt_vec##n (json, name, index, opt); \
-} \
-VEC##n##_TYPE json_get_opt_vec##n (cJSON *const json, const char *name, int index, VEC##n##_TYPE opt) { \
-  cJSON *item = json_get_item(json, name, index); \
-  if (!item) return opt; \
-  return json_opt_vec##n(item, opt); \
-}
-
-JSON_VECN(2);
-JSON_VECN(3);
-JSON_VECN(4);
-
-/***********
- * Boolean
- ***********/
-
-cJSON* json_create_boolean(int boolean) {
-  return cJSON_CreateBool(boolean);
-}
-
-int json_is_boolean(cJSON* const json) {
-  // cJSON *val = cJSON_GetObjectItem(json, name);
-  CM_ASSERT(json != NULL);
-  return cJSON_IsBool(json);
-}
-
-void json_set_boolean(cJSON *const json, int boolean) {
-  if (!json_is_boolean(json)) return;
-
-  json->valueint = boolean;
-}
-
-int json_to_boolean(cJSON* const json) {
-  return json_opt_boolean(json, -1);
-}
-
-int json_opt_boolean(cJSON *const json, int opt) {
-  if (!json_is_boolean(json)) return opt;
-
-  return json->valueint;
-}
-
-
-cJSON *json_add_boolean(cJSON *const json, const char *name, int boolean) {
-  cJSON *item = json_create_boolean(boolean);
-  if (json_add_item(json, name, item)) return item;
-
-  json_delete(item);
-  return NULL;
-}
-
-int json_get_boolean(cJSON* const json, const char *name, int index) {
-  return json_get_opt_boolean(json, name, index, -1);
-}
-int json_get_opt_boolean(cJSON* const json, const char *name, int index, int opt_boolean) {
-  cJSON *item = json_get_item(json, name, index);
-  if (!item) return opt_boolean;
-
-  return json_opt_boolean(item, opt_boolean);
-}
-
-/***********
- * Array
- ***********/
-
-cJSON* json_create_array(const cJSON *json) {
-  cJSON *item = cJSON_CreateArray();
-  return item;
-}
-
-int json_is_array(cJSON* const json) {
-  CM_ASSERT(json != NULL);
-  return cJSON_IsArray(json);
-}
-
-void json_set_array(cJSON* const json, const cJSON* jsonArray) {
-
-}
-
-const cJSON* json_to_array(cJSON *const json) {
-  return json_opt_array(json, NULL);
-}
-
-const cJSON* json_opt_array(cJSON *const json, const cJSON* opt) {
-  if (!json_is_array(json)) return opt;
-
-  return json;
-}
-
-cJSON* json_add_array(cJSON *const json, const char *name, const cJSON *array) {
-  if (!array) {
-    cJSON *item = json_create_array(NULL);
-    json_add_item(json, name, item);
-    return item;
-  }
-
-  if (!json_is_array((cJSON*)array)) return NULL;
-  json_add_item(json, name, (cJSON*)array);
-  return (cJSON*)array;
-}
-
-const cJSON* json_get_array(cJSON* const json, const char *name, int index) {
-  cJSON *array = cJSON_GetObjectItem(json, name);
-  if (cJSON_IsArray(array)) {
-    return array;
-  }
-  return NULL;
-}
-
-const cJSON* json_get_opt_array(cJSON *const json, const char *name, int index, const cJSON *opt) {
-  cJSON *item = json_get_item(json, name, index);
-  if (!item) return opt;
-
-  return json_opt_array(item, opt);
-}
-
-
-
-int json_get_array_size(const cJSON *json) {
-  return cJSON_GetArraySize(json);
-}
-
-/*************
- * Object
- *************/
-
-cJSON *json_create_object(const cJSON* json) {
-  cJSON *item = cJSON_CreateObject();
-  return item;
-}
-
-int json_is_object(cJSON* const json) {
-  // cJSON *obj = cJSON_GetObjectItem(json, name);
-  // if (obj) return cJSON_IsObject(obj);
-  // return tc_false;
-  CM_ASSERT(json != NULL);
-  return cJSON_IsObject(json);
-}
-
-void json_set_object(cJSON *const json, const cJSON *value) {
-
-}
-
-const cJSON *json_to_object(cJSON *const json) {
-  return json_opt_object(json, NULL);
-}
-
-const cJSON *json_opt_object(cJSON *const json, const cJSON *opt) {
-  if (!json_is_object(json)) return opt;
-
-  return json;
-}
-
-cJSON *json_add_object(cJSON *const json, const char *name, const cJSON *value) {
-  if (!value) {
-    cJSON *item = json_create_object(NULL);
-    json_add_item(json, name, item);
-    return item;
-  }
-
-  if (!json_is_object((cJSON*)value)) return NULL;
-  json_add_item(json, name, (cJSON*)value);
-  return (cJSON*)value;
-}
-
-const cJSON* json_get_object(cJSON* const json, const char *name, int index) {
-  // cJSON *obj = cJSON_GetObjectItem(json, name);
-  // if (cJSON_IsObject(obj)) return obj;
-  // return NULL;
-  return json_get_opt_object(json, name, index, NULL);
-}
-
-const cJSON* json_get_opt_object(cJSON *const json, const char *name, int index, const cJSON *opt) {
-  cJSON *item = json_get_item(json, name, index);
-  if (!item) return opt;
-
-  return json_opt_object(item, opt);
+  return out;
 }
 
 /*===============*

@@ -1,7 +1,8 @@
 {
 	"transform": {
-		"q": 123
+		"position": [0, 0]
 	},
+	"position": [0, 0],
 	"HAHAHAHAHAHA": "REIOOOOOOOOOOOSSE",
 	"teste": "testando",
 	"number": 10,
@@ -17,7 +18,9 @@
 		20,
 		{
 			"trace": "log"
-		}
+		},
+		10
 	],
-	"hehehe": null
+	"hehehe": 123,
+	"ok": [0, 5]
 }
