@@ -1782,6 +1782,7 @@ void coffee_table_set(coffee_table_t *table, const char *name, coffee_t *value) 
   coffee_array_push(table, value);
   table->len++;
 }
+
 void coffee_table_remove(coffee_table_t *table, const char *name) {
   CM_ASSERT(table != NULL);
   coffee_t *iter = coffee_table_get(table, name);
@@ -1790,6 +1791,7 @@ void coffee_table_remove(coffee_table_t *table, const char *name) {
   if (table->child == iter) table->child = iter->next;
   coffee_delete(iter);
 }
+
 coffee_t* coffee_clone_table(coffee_t* coffee) {
   CHECK_TYPE(coffee, COFFEE_TARRAY);
 
@@ -1802,6 +1804,201 @@ coffee_t* coffee_clone_table(coffee_t* coffee) {
   coffee_setname(coffee, coffee->name);
 
   return clone;
+}
+
+void coffee_table_setnumber(coffee_table_t *table, const char *name, double value) {
+  CM_ASSERT(table != NULL);
+  if (!name) return;
+
+  coffee_t *n = coffee_create_float(value);
+  coffee_table_set(table, name, n);
+}
+void coffee_table_setstring(coffee_table_t *table, const char *name, const char* value) {
+  CM_ASSERT(table != NULL);
+  if (!name) return;
+
+  coffee_t *s = coffee_create_string(value);
+  coffee_table_set(table, name, s);
+}
+void coffee_table_setboolean(coffee_table_t *table, const char *name, int value) {
+  CM_ASSERT(table != NULL);
+  if (!name) return;
+
+  coffee_t *b = coffee_create_boolean(value);
+  coffee_table_set(table, name, b);
+}
+void coffee_table_setvec2(coffee_table_t *table, const char *name, double *value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_t *vec = coffee_create_vec2(value[0], value[1]);
+  coffee_table_set(table, name, vec);
+}
+void coffee_table_setvec3(coffee_table_t *table, const char *name, double *value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_t *vec = coffee_create_vec3(value[0], value[1], value[2]);
+  coffee_table_set(table, name, vec);
+}
+void coffee_table_setvec4(coffee_table_t *table, const char *name, double *value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_t *vec = coffee_create_vec4(value[0], value[1], value[2], value[3]);
+  coffee_table_set(table, name, vec);
+}
+void coffee_table_setarray(coffee_table_t *table, const char *name, coffee_t *value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_table_set(table, name, value);
+}
+void coffee_table_settable(coffee_table_t *table, const char *name, coffee_t *value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_table_set(table, name, value);
+}
+void coffee_table_setuserdata(coffee_table_t *table, const char *name, void *value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_t *udata = coffee_create_userdata(value);
+  coffee_table_set(table, name, udata);
+}
+void coffee_table_setfunction(coffee_table_t *table, const char *name, coffee_fn *value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_t *udata = coffee_create_function(value);
+  coffee_table_set(table, name, udata);
+}
+void coffee_table_setref(coffee_table_t *table, const char *name, coffee_t* value) {
+  CM_ASSERT(table != NULL);
+  CM_ASSERT(value != NULL);
+  if (!name) return;
+
+  coffee_t *udata = coffee_create_ref(value);
+  coffee_table_set(table, name, udata);
+}
+
+double coffee_table_getnumber(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return _GET_ERROR;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return _GET_ERROR;
+  if (!coffee_isnumber(item)) return _GET_ERROR;
+
+  return item->number.value;
+}
+const char* coffee_table_getstring(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isstring(item)) return NULL;
+
+  return item->string.value;
+}
+int coffee_table_getboolean(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return _GET_ERROR;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return _GET_ERROR;
+  if (!coffee_isboolean(item)) return _GET_ERROR;
+
+  return item->number.value;
+}
+double* coffee_table_getvec2(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isvec2(item)) return NULL;
+
+  return item->vec2.data;
+}
+double* coffee_table_getvec3(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isvec3(item)) return NULL;
+
+  return item->vec3.data;
+}
+double* coffee_table_getvec4(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isvec4(item)) return NULL;
+
+  return item->vec4.data;
+}
+coffee_t* coffee_table_getarray(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isarray(item)) return NULL;
+
+  return item;
+}
+coffee_t* coffee_table_gettable(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_istable(item)) return NULL;
+
+  return item;
+}
+void* coffee_table_getuserdata(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isuserdata(item)) return NULL;
+
+  return item->userdata.data;
+}
+coffee_fn* coffee_table_getfunction(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isfunction(item)) return NULL;
+
+  return item->func;
+}
+coffee_t*  coffee_table_getref(coffee_table_t *table, const char *name) {
+  CM_ASSERT(table != NULL);
+  if (!name) return NULL;
+
+  coffee_t *item = coffee_table_get(table, name);
+  if (!item) return NULL;
+  if (!coffee_isref(item)) return NULL;
+
+  return item->ref;
 }
 
 /*================*

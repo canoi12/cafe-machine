@@ -66,6 +66,8 @@
 #define CM_META_NAME  "__name__"
 #define CM_META_TYPE  "__type__"
 
+#define _GET_ERROR -590362
+
 
 #define cm_vec_t(n) \
   struct cm_vec##n##_t { \
@@ -75,7 +77,10 @@
 typedef cm_vec_t(2) cm_vec2_t;
 typedef cm_vec_t(3) cm_vec3_t;
 typedef cm_vec_t(4) cm_vec4_t;
+
 typedef int cm_bool_t;
+#define CM_FALSE 0
+#define CM_TRUE 1
 
 #define cm_object_foreach(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)
 
@@ -276,6 +281,7 @@ struct coffee_s {
     coffee_vec2_t vec2;
     coffee_vec3_t vec3;
     coffee_vec4_t vec4;
+    coffee_table_t *array;
     coffee_table_t *table;
     coffee_udata_t userdata;
     coffee_fn *func;
@@ -509,6 +515,30 @@ CM_API int coffee_table_length(coffee_table_t *table);
 CM_API coffee_t* coffee_table_get(coffee_table_t *array, const char *name);
 CM_API void coffee_table_set(coffee_table_t *array, const char *name, coffee_t *value);
 CM_API coffee_t* coffee_clone_table(coffee_t* coffee);
+
+CM_API void coffee_table_setnumber(coffee_table_t *table, const char *name, double value);
+CM_API void coffee_table_setstring(coffee_table_t *table, const char *name, const char* value);
+CM_API void coffee_table_setboolean(coffee_table_t *table, const char *name, int value);
+CM_API void coffee_table_setvec2(coffee_table_t *table, const char *name, double *value);
+CM_API void coffee_table_setvec3(coffee_table_t *table, const char *name, double *value);
+CM_API void coffee_table_setvec4(coffee_table_t *table, const char *name, double *value);
+CM_API void coffee_table_setarray(coffee_table_t *table, const char *name, coffee_t *value);
+CM_API void coffee_table_settable(coffee_table_t *table, const char *name, coffee_t *value);
+CM_API void coffee_table_setuserdata(coffee_table_t *table, const char *name, void *value);
+CM_API void coffee_table_setfunction(coffee_table_t *table, const char *name, coffee_fn *value);
+CM_API void coffee_table_setref(coffee_table_t *table, const char *name, coffee_t* value);
+
+CM_API double coffee_table_getnumber(coffee_table_t *table, const char *name);
+CM_API const char* coffee_table_getstring(coffee_table_t *table, const char *name);
+CM_API int coffee_table_getboolean(coffee_table_t *table, const char *name);
+CM_API double* coffee_table_getvec2(coffee_table_t *table, const char *name);
+CM_API double* coffee_table_getvec3(coffee_table_t *table, const char *name);
+CM_API double* coffee_table_getvec4(coffee_table_t *table, const char *name);
+CM_API coffee_t* coffee_table_getarray(coffee_table_t *table, const char *name);
+CM_API coffee_t* coffee_table_gettable(coffee_table_t *table, const char *name);
+CM_API void* coffee_table_getuserdata(coffee_table_t *table, const char *name);
+CM_API coffee_fn* coffee_table_getfunction(coffee_table_t *table, const char *name);
+CM_API coffee_t*  coffee_table_getref(coffee_table_t *table, const char *name);
 
 /*=============*
  * Userdata    *
