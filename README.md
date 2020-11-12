@@ -50,7 +50,9 @@ Later i plan to create a format that the vm can interpret, and can convert to js
 }
 // player.coffee
 {
-  "transform": <require>("components.transform"),
+  "transform": <require>("components.transform"){
+    "scale": <vec2>(1, 1)
+  },
   "speed": <vec2>
 }
 ```
@@ -66,7 +68,7 @@ Later i plan to create a format that the vm can interpret, and can convert to js
 {
   "transform": {
     "position": [10, 20],
-    "scale": [0, 0],
+    "scale": [1, 1],
     "angle": 0
   },
   "speed": [0, 0]
