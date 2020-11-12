@@ -78,7 +78,12 @@ typedef cm_vec_t(4) cm_vec4_t;
 typedef int cm_bool_t;
 
 #define cm_object_foreach(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)
+
+#define coffee_table_foreach(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)
+#define coffee_foreach(element, array) for(element = (array != NULL) ? (array)->table->child : NULL; element != NULL; element = element->next)
 #define cm_object_parent(element) (element ? element->parent : NULL);
+
+// #define coffee_foreach(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)
 
 #define CM_FUNCTION_DEF(func_name, ...) \
 func_name (cm_object_t *type, __VA_ARGS__)
@@ -122,17 +127,434 @@ typedef struct cm_hashmap_t {
 
 } cm_hashmap_t;
 
-struct coffee_machine_t {
-  cm_object_t *root;
-  cm_object_t *gc;
+#define CHECK_TYPE(coffee, c_type) \
+  CM_ASSERT(coffee != NULL); \
+  CM_ASSERT(coffee->type == c_type);
 
-  cm_object_t* stack[MAX_STACK];
+typedef enum COFFEE_T_ {
+  COFFEE_TNULL = 0,
+  COFFEE_TNUMBER,
+  COFFEE_TSTRING,
+  COFFEE_TBOOL,
+  COFFEE_TVEC2,
+  COFFEE_TVEC3,
+  COFFEE_TVEC4,
+  COFFEE_TARRAY,
+  COFFEE_TTABLE,
+  COFFEE_TUSERDATA,
+  COFFEE_TFUNCTION,
+  COFFEE_TREF,
+  COFFEE_TMAX
+} COFFEE_T_;
+
+typedef void* coffee_ptr;
+typedef int(*coffee_fn)(coffee_ptr*);
+/* coffee types */
+typedef struct coffee_s          coffee_t;
+typedef struct coffee_float_s    coffee_float_t;
+typedef struct coffee_int_s      coffee_int_t;
+typedef struct coffee_number_s   coffee_number_t;
+typedef struct coffee_boolean_s  coffee_boolean_t;
+typedef struct coffee_string_s   coffee_string_t;
+typedef struct coffee_vec2_s     coffee_vec2_t;
+typedef struct coffee_vec3_s     coffee_vec3_t;
+typedef struct coffee_vec4_s     coffee_vec4_t;
+typedef struct coffee_table_s    coffee_table_t;
+typedef struct coffee_userdata_s coffee_udata_t;
+typedef struct coffee_function_s coffee_function_t;
+
+struct coffee_machine_t {
+  coffee_t *root;
+  coffee_t *gc;
+
+  coffee_t* stack[MAX_STACK];
   int stack_index;
   int fp;
 
   const char*(*read_file)(const char *, const char*);
   void(*write_file)(const char *, const char *, size_t, const char*);
 };
+
+struct coffee_float_s {
+  float value;
+};
+
+struct coffee_int_s {
+  int value;
+};
+
+typedef enum {
+  COFFEE_NUMBER_FLOAT = 0,
+  COFFEE_NUMBER_INT
+} COFFEE_NUMBER_T_;
+
+struct coffee_number_s {
+  union {
+    coffee_float_t value_float;
+    coffee_int_t value_int;
+    double value;
+  };
+  COFFEE_NUMBER_T_ type;
+};
+
+struct coffee_string_s {
+  int len;
+  char *value;
+};
+
+struct coffee_boolean_s {
+  unsigned char value;
+};
+
+struct coffee_userdata_s {
+  coffee_table_t *meta;
+  void *data;
+};
+
+struct coffee_vec2_s {
+  union {
+    double data[2];
+    struct {
+      double x;
+      double y;
+    };
+  };
+};
+
+struct coffee_vec3_s {
+  // VEC3_TYPE vec;
+  union {
+    double data[3];
+    struct {
+      double x;
+      double y;
+      double z;
+    };
+  };
+};
+
+struct coffee_vec4_s {
+  // VEC4_TYPE vec;
+  union {
+    double data[4];
+    struct {
+      double x;
+      double y;
+      double z;
+      double w;
+    };
+  };
+};
+
+struct coffee_table_s {
+  coffee_table_t *meta;
+  int len;
+  coffee_t *child;
+};
+
+typedef enum COFFEE_FUNC_TYPE_ {
+  COFFEE_VM_FUNC,
+  COFFEE_OBJ_FUNC
+} COFFEE_FUNC_TYPE_;
+
+struct coffee_function_s {
+  COFFEE_FUNC_TYPE_ type;
+  union {
+    int(*vm)(coffee_machine_t*);
+    int(*obj)(coffee_t*);
+  };  
+};
+
+struct coffee_s {
+  COFFEE_T_ type;
+  unsigned char marked;
+  char *name;
+
+  union {
+    coffee_number_t number;
+    coffee_string_t string;
+    coffee_vec2_t vec2;
+    coffee_vec3_t vec3;
+    coffee_vec4_t vec4;
+    coffee_table_t *table;
+    coffee_udata_t userdata;
+    coffee_fn *func;
+    coffee_t *ref;
+  };
+
+  coffee_t *prev;
+  coffee_t *next;
+};
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
+/*======================================*
+ *                 VM                   *
+ *======================================*/
+
+CM_API int cm_init();
+CM_API void cm_deinit();
+CM_API coffee_machine_t* cm_get_vm();
+CM_API void cm_gc();
+
+CM_API const char* cm_version();
+
+CM_API coffee_t* cm_get_type(const char *type_name);
+CM_API coffee_t* cm_set_type(const char *type_name, coffee_t *type);
+
+CM_API coffee_t* cm_get_object(const char *name);
+CM_API coffee_t* cm_set_object(const char *name, coffee_t *object);
+
+CM_API int cm_call(coffee_machine_t *vm, int args, int ret);
+CM_API void cm_settop(coffee_machine_t *vm, int top);
+CM_API int cm_gettop(coffee_machine_t *vm);
+
+CM_API void cm_push(coffee_machine_t *vm, coffee_t *obj);
+CM_API coffee_t *cm_pop(coffee_machine_t *vm);
+CM_API coffee_t *cm_get(coffee_machine_t *vm, int index);
+
+CM_API void cm_newtable(coffee_machine_t *vm);
+CM_API void cm_setmetatable(coffee_machine_t *vm);
+CM_API void cm_getmetatable(coffee_machine_t *vm);
+CM_API void cm_newarray(coffee_machine_t *vm);
+
+CM_API void cm_pushnumber(coffee_machine_t *vm, float number);
+CM_API void cm_pushstring(coffee_machine_t *vm, const char *string);
+CM_API void cm_pushboolean(coffee_machine_t *vm, int boolean);
+CM_API void cm_pushvec2(coffee_machine_t *vm, double data[2]);
+CM_API void cm_pushvec3(coffee_machine_t *vm, double data[3]);
+CM_API void cm_pushvec4(coffee_machine_t *vm, double data[4]);
+CM_API void cm_pushcfunction(coffee_machine_t *vm, cm_function *fn);
+// CM_API void cm_pushtable(coffee_machine_t *vm);
+CM_API void cm_pushvalue(coffee_machine_t *vm, int index);
+
+CM_API float cm_tonumber(coffee_machine_t *vm, int index);
+CM_API const char* cm_tostring(coffee_machine_t *vm, int index);
+CM_API int cm_toboolean(coffee_machine_t *vm, int index);
+CM_API double* cm_tovec2(coffee_machine_t *vm, int index);
+CM_API double* cm_tovec3(coffee_machine_t *vm, int index);
+CM_API double* cm_tovec4(coffee_machine_t *vm, int index);
+CM_API coffee_t* cm_toobject(coffee_machine_t *vm, int index);
+CM_API void *cm_touserdata(coffee_machine_t *vm, int index);
+CM_API coffee_t* cm_toref(coffee_machine_t *vm, int index);
+CM_API cm_function* cm_tofunction(coffee_machine_t *vm, int index);
+
+CM_API float cm_checknumber(coffee_machine_t *vm, int index);
+CM_API const char* cm_checkstring(coffee_machine_t *vm, int index);
+CM_API int cm_checkboolean(coffee_machine_t *vm, int index);
+CM_API double* cm_checkvec2(coffee_machine_t *vm, int index);
+CM_API double* cm_checkvec3(coffee_machine_t *vm, int index);
+CM_API double* cm_checkvec4(coffee_machine_t *vm, int index);
+CM_API coffee_t* cm_checkobject(coffee_machine_t *vm, int index);
+CM_API void *cm_checkudata(coffee_machine_t *vm, int index);
+CM_API coffee_t* cm_checkref(coffee_machine_t *vm, int index);
+CM_API cm_function* cm_checkfunction(coffee_machine_t *vm, int index);
+
+CM_API float cm_optnumber(coffee_machine_t *vm, int index, float opt);
+CM_API const char* cm_optstring(coffee_machine_t *vm, int index, const char *opt);
+CM_API int cm_optboolean(coffee_machine_t *vm, int index, int opt);
+CM_API double* cm_optvec2(coffee_machine_t *vm, int index, double data[2]);
+CM_API double* cm_optvec3(coffee_machine_t *vm, int index, double data[3]);
+CM_API double* cm_optvec4(coffee_machine_t *vm, int index, double data[4]);
+CM_API coffee_t* cm_optobject(coffee_machine_t *vm, int index, coffee_t *opt);
+CM_API void *cm_optudata(coffee_machine_t *vm, int index, void *opt);
+CM_API coffee_t* cm_optref(coffee_machine_t *vm, int index, coffee_t *opt);
+CM_API cm_function* cm_optfunction(coffee_machine_t *vm, int index, cm_function *opt);
+
+/*====================================*
+ *               Coffee               *
+ *====================================*/
+
+CM_API void coffee_print(coffee_t *coffee);
+
+CM_API coffee_t* coffee_create(COFFEE_T_ type);
+CM_API coffee_t* coffee_load(const char *filename);
+CM_API coffee_t* coffee_load_json(const char *filename);
+CM_API coffee_t* coffee_clone(coffee_t *coffee);
+CM_API void coffee_delete(coffee_t *coffee);
+CM_API void coffee_clear(coffee_t *coffee);
+
+CM_API coffee_t* coffee_parse(const char *coffee_string);
+CM_API coffee_t* coffee_parse_json(const char *json_string);
+
+CM_API coffee_t* coffee_from_json(coffee_t *coffee_json);
+CM_API const char* coffee_print_json(coffee_t *coffee_json, int *char_count_out);
+CM_API const char* coffee_print_coffee(coffee_t *coffee);
+
+// CM_API void coffee_set_metatable(coffee_t *coffee, )
+CM_API void coffee_setmetatable(coffee_table_t *table, coffee_table_t *metatable);
+CM_API coffee_table_t* coffee_getmetatable(coffee_table_t *table);
+CM_API void coffee_setname(coffee_t *coffee, const char *name);
+CM_API const char* coffee_getname(coffee_t *coffee);
+
+CM_API coffee_t* coffee_get(coffee_t *coffee, const char *name);
+CM_API coffee_t* coffee_index(coffee_t *coffee, int index);
+CM_API int coffee_length(coffee_t *coffee);
+
+CM_API coffee_table_t* coffee_newtable();
+
+/*===========*
+ * Null      *
+ *===========*/
+
+CM_API int coffee_isnull(coffee_t *coffee);
+CM_API coffee_t* coffee_create_null();
+
+/*===========*
+ * Number    *
+ *===========*/
+
+CM_API coffee_t* coffee_create_number(double value, int type);
+CM_API int coffee_isnumber(coffee_t *coffee);
+CM_API double coffee_tonumber(coffee_t *coffee);
+CM_API double coffee_checknumber(coffee_t *coffee);
+CM_API void coffee_setnumber(coffee_t *coffee, double number);
+CM_API coffee_t* coffee_clone_number(coffee_t *coffee);
+
+CM_API coffee_t* coffee_create_float(float value);
+CM_API int coffee_isfloat(coffee_t *coffee);
+CM_API float coffee_tofloat(coffee_t *coffee);
+CM_API float coffee_checkfloat(coffee_t *coffee);
+CM_API void coffee_setfloat(coffee_t *coffee, float number);
+
+CM_API coffee_t* coffee_create_int(int value);
+CM_API int coffee_isint(coffee_t *coffee);
+CM_API int coffee_toint(coffee_t *coffee);
+CM_API int coffee_checkint(coffee_t *coffee);
+CM_API void coffee_setint(coffee_t *coffee, int number);
+
+/*===========*
+ * String    *
+ *===========*/
+
+CM_API coffee_t* coffee_create_string(const char *string);
+CM_API int coffee_isstring(coffee_t *coffee);
+CM_API const char* coffee_tostring(coffee_t *coffee);
+CM_API const char* coffee_checkstring(coffee_t *coffee);
+CM_API void coffee_setstring(coffee_t *coffee, const char *string);
+CM_API coffee_t* coffee_clone_string(coffee_t *coffee);
+
+/*===========*
+ * Bool      *
+ *===========*/
+
+CM_API coffee_t* coffee_create_boolean(int boolean);
+CM_API int coffee_isboolean(coffee_t *coffee);
+CM_API int coffee_toboolean(coffee_t *coffee);
+CM_API int coffee_checkboolean(coffee_t *coffee);
+CM_API void coffee_setboolean(coffee_t *coffee, int boolean);
+CM_API coffee_t* coffee_clone_boolean(coffee_t *coffee);
+
+/*===========*
+ * Vec2      *
+ *===========*/
+
+CM_API coffee_t* coffee_create_vec2(double x, double y);
+CM_API int coffee_isvec2(coffee_t *coffee);
+CM_API double* coffee_tovec2(coffee_t *coffee);
+CM_API double* coffee_checkvec2(coffee_t *coffee);
+CM_API void coffee_setvec2(coffee_t *coffee, double x, double y);
+CM_API coffee_t* coffee_clone_vec2(coffee_t* coffee);
+
+/*===========*
+ * Vec3      *
+ *===========*/
+
+CM_API coffee_t* coffee_create_vec3(double x, double y, double z);
+CM_API int coffee_isvec3(coffee_t *coffee);
+CM_API double* coffee_tovec3(coffee_t *coffee);
+CM_API double* coffee_checkvec3(coffee_t *coffee);
+CM_API void coffee_setvec3(coffee_t *coffee, double x, double y, double z);
+CM_API coffee_t* coffee_clone_vec3(coffee_t* coffee);
+
+/*===========*
+ * Vec4      *
+ *===========*/
+
+CM_API coffee_t* coffee_create_vec4(double x, double y, double z, double w);
+CM_API int coffee_isvec4(coffee_t *coffee);
+CM_API double* coffee_tovec4(coffee_t *coffee);
+CM_API double* coffee_checkvec4(coffee_t *coffee);
+CM_API void coffee_setvec4(coffee_t *coffee, double x, double y, double z, double w);
+CM_API coffee_t* coffee_clone_vec4(coffee_t* coffee);
+
+/*===========*
+ * Array     *
+ *===========*/
+
+CM_API coffee_t* coffee_create_array();
+CM_API int coffee_isarray(coffee_t *coffee);
+CM_API coffee_table_t* coffee_toarray(coffee_t *coffee);
+CM_API coffee_table_t* coffee_checkarray(coffee_t *coffee);
+CM_API coffee_table_t* coffee_setarray(coffee_t *coffee, coffee_table_t *array);
+CM_API int coffee_array_length(coffee_table_t *array);
+CM_API coffee_t* coffee_array_get(coffee_table_t *array, int index);
+CM_API void coffee_array_set(coffee_table_t *array, int index, coffee_t *value);
+CM_API void coffee_array_push(coffee_table_t *array, coffee_t *value);
+CM_API coffee_t* coffee_array_pop(coffee_table_t *array);
+CM_API coffee_t* coffee_clone_array(coffee_t* coffee);
+
+/*===========*
+ * Table     *
+ *===========*/
+
+CM_API coffee_t* coffee_create_table();
+CM_API int coffee_istable(coffee_t *coffee);
+CM_API coffee_table_t* coffee_totable(coffee_t *coffee);
+CM_API coffee_table_t* coffee_checktable(coffee_t *coffee);
+CM_API coffee_table_t* coffee_settable(coffee_t *coffee, coffee_table_t *table);
+CM_API int coffee_table_length(coffee_table_t *table);
+CM_API coffee_t* coffee_table_get(coffee_table_t *array, const char *name);
+CM_API void coffee_table_set(coffee_table_t *array, const char *name, coffee_t *value);
+CM_API coffee_t* coffee_clone_table(coffee_t* coffee);
+
+/*=============*
+ * Userdata    *
+ *=============*/
+
+CM_API coffee_t* coffee_create_userdata(void *udata);
+CM_API int coffee_isuserdata(coffee_t *coffee);
+CM_API void* coffee_touserdata(coffee_t *coffee);
+CM_API void* coffee_checkudata(coffee_t *coffee);
+CM_API void* coffee_setuserdata(coffee_t *coffee, void *userdata);
+CM_API coffee_t* coffee_clone_userdata(coffee_t* coffee);
+
+/*=============*
+ * Function    *
+ *=============*/
+
+CM_API coffee_t* coffee_create_function(coffee_fn *func);
+CM_API int coffee_isfunction(coffee_t *coffee);
+CM_API coffee_fn* coffee_tofunction(coffee_t *coffee);
+CM_API coffee_fn* coffee_checkfunction(coffee_t *coffee);
+CM_API void coffee_setfunction(coffee_t *coffee, coffee_fn* fn);
+CM_API int coffee_call_function(coffee_t *coffee);
+CM_API coffee_t* coffee_clone_function(coffee_t* coffee);
+
+/*==============*
+ * Reference    *
+ *==============*/
+
+CM_API coffee_t* coffee_create_ref(coffee_t *ref);
+CM_API int coffee_isref(coffee_t *coffee);
+CM_API coffee_t* coffee_toref(coffee_t *coffee);
+CM_API coffee_t* coffee_checkref(coffee_t *coffee);
+CM_API coffee_t* coffee_setref(coffee_t *coffee, coffee_t *ref);
+CM_API coffee_t* coffee_clone_ref(coffee_t* coffee);
+
+/*=========================================================*
+ *                        Debug                            *
+ *=========================================================*/
+
+CM_API void cm_tracelog(int mode, const char *func, const char *file, int line, const char *fmt, ...);
+CM_API void cm_log(int mode, const char *fmt, ...);
+
+
+/*==============================*
+ *          DON'T USE           *
+ *==============================*/
 
 struct cm_object_t {
   CM_T_ type;
@@ -157,87 +579,6 @@ struct cm_object_t {
   cm_object_t *parent;
   cm_object_t *child;
 };
-
-#if defined(__cplusplus)
-extern "C" {
-#endif
-
-/*=====================*
- *         VM          *
- *=====================*/
-
-CM_API int cm_init();
-CM_API void cm_deinit();
-CM_API coffee_machine_t* cm_get_vm();
-CM_API void cm_gc();
-
-CM_API const char* cm_version();
-
-CM_API cm_object_t* cm_get_type(const char *type_name);
-CM_API cm_object_t* cm_set_type(const char *type_name, cm_object_t *type);
-
-CM_API cm_object_t* cm_get_object(const char *name);
-CM_API cm_object_t* cm_set_object(const char *name, cm_object_t *object);
-
-CM_API int cm_call(coffee_machine_t *vm, int args, int ret);
-CM_API void cm_settop(coffee_machine_t *vm, int top);
-CM_API int cm_gettop(coffee_machine_t *vm);
-
-CM_API void cm_push(coffee_machine_t *vm, cm_object_t *obj);
-CM_API cm_object_t *cm_pop(coffee_machine_t *vm);
-CM_API cm_object_t *cm_get(coffee_machine_t *vm, int index);
-
-CM_API void cm_newtable(coffee_machine_t *vm);
-CM_API void cm_setmetatable(coffee_machine_t *vm);
-CM_API void cm_getmetatable(coffee_machine_t *vm);
-CM_API void cm_newarray(coffee_machine_t *vm);
-
-CM_API void cm_pushnumber(coffee_machine_t *vm, float number);
-CM_API void cm_pushstring(coffee_machine_t *vm, const char *string);
-CM_API void cm_pushboolean(coffee_machine_t *vm, int boolean);
-CM_API void cm_pushvec2(coffee_machine_t *vm, VEC2_TYPE vec2);
-CM_API void cm_pushvec3(coffee_machine_t *vm, VEC3_TYPE vec3);
-CM_API void cm_pushvec4(coffee_machine_t *vm, VEC4_TYPE vec4);
-CM_API void cm_pushcfunction(coffee_machine_t *vm, cm_function *fn);
-// CM_API void cm_pushtable(coffee_machine_t *vm);
-CM_API void cm_pushvalue(coffee_machine_t *vm, int index);
-
-CM_API float cm_tonumber(coffee_machine_t *vm, int index);
-CM_API const char* cm_tostring(coffee_machine_t *vm, int index);
-CM_API int cm_toboolean(coffee_machine_t *vm, int index);
-CM_API VEC2_TYPE cm_tovec2(coffee_machine_t *vm, int index);
-CM_API VEC3_TYPE cm_tovec3(coffee_machine_t *vm, int index);
-CM_API VEC4_TYPE cm_tovec4(coffee_machine_t *vm, int index);
-CM_API cm_object_t* cm_toobject(coffee_machine_t *vm, int index);
-CM_API void *cm_touserdata(coffee_machine_t *vm, int index);
-CM_API cm_object_t* cm_toref(coffee_machine_t *vm, int index);
-CM_API cm_function* cm_tofunction(coffee_machine_t *vm, int index);
-
-CM_API float cm_checknumber(coffee_machine_t *vm, int index);
-CM_API const char* cm_checkstring(coffee_machine_t *vm, int index);
-CM_API int cm_checkboolean(coffee_machine_t *vm, int index);
-CM_API VEC2_TYPE cm_checkvec2(coffee_machine_t *vm, int index);
-CM_API VEC3_TYPE cm_checkvec3(coffee_machine_t *vm, int index);
-CM_API VEC4_TYPE cm_checkvec4(coffee_machine_t *vm, int index);
-CM_API cm_object_t* cm_checkobject(coffee_machine_t *vm, int index);
-CM_API void *cm_checkudata(coffee_machine_t *vm, int index);
-CM_API cm_object_t* cm_checkref(coffee_machine_t *vm, int index);
-CM_API cm_function* cm_checkfunction(coffee_machine_t *vm, int index);
-
-CM_API float cm_optnumber(coffee_machine_t *vm, int index, float opt);
-CM_API const char* cm_optstring(coffee_machine_t *vm, int index, const char *opt);
-CM_API int cm_optboolean(coffee_machine_t *vm, int index, int opt);
-CM_API VEC2_TYPE cm_optvec2(coffee_machine_t *vm, int index, VEC2_TYPE opt);
-CM_API VEC3_TYPE cm_optvec3(coffee_machine_t *vm, int index, VEC3_TYPE opt);
-CM_API VEC4_TYPE cm_optvec4(coffee_machine_t *vm, int index, VEC4_TYPE opt);
-CM_API cm_object_t* cm_optobject(coffee_machine_t *vm, int index, cm_object_t *opt);
-CM_API void *cm_optudata(coffee_machine_t *vm, int index, void *opt);
-CM_API cm_object_t* cm_optref(coffee_machine_t *vm, int index, cm_object_t *opt);
-CM_API cm_function* cm_optfunction(coffee_machine_t *vm, int index, cm_function *opt);
-
-/*======================*
- *        Coffee        *
- *======================*/
 
 CM_API cm_object_t* cm_parse_json(const char *json_string);
 // CM_API cm_object_t* cm_load_coffee_from_json(const char *json_string);
@@ -298,13 +639,6 @@ CM_TDEF(table, cm_object_t*);
 CM_TDEF(userdata, void*);
 CM_TDEF(function, cm_function*);
 CM_TDEF(reference, cm_object_t*);
-
-/*===============*
- *     Debug     *
- *===============*/
-
-CM_API void cm_tracelog(int mode, const char *func, const char *file, int line, const char *fmt, ...);
-CM_API void cm_log(int mode, const char *fmt, ...);
 
 #if defined(__cplusplus)
 }

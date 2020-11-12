@@ -2,3 +2,5 @@ vm
 *.coffee
 project.tico
 *.sublime-*
+coffee.c.old
+coffee.h.old
